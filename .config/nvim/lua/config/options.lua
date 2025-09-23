@@ -54,7 +54,7 @@ vim.g.netrw_banner = 0
 -- global variables
 vim.g.mapleader = ' ' -- map leader to space bar
 vim.g.maplocalleader = '\\' -- map local leader to backspace 
-vim.g.python3_host_prog = os.getenv('HOME') .. '/.pyenv/versions/3.13.5/bin/python3' -- python path
+vim.g.python3_host_prog = os.getenv('HOME') .. '/.pyenv/versions/3.13.2/bin/python3' -- python path
 vim.g.loaded_python_provider = 0 -- disable Python2 support
 vim.g.loaded_perl_provider = 0 -- disable perl provider
 vim.g.loaded_ruby_provider = 0 -- disable ruby provider
