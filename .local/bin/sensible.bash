@@ -96,8 +96,7 @@ CDPATH="."
 shopt -s cdable_vars
 
 # Examples:
-export docs="$HOME/Documents"
-# export dotfiles="$HOME/dotfiles"
-# export projects="$HOME/projects"
-# export dropbox="$HOME/Dropbox"
+export proj="$HOME/Documents/academia/funding/2026-erc/"
+export da="$HOME/Documents/academia/teaching/data-analysis/"
+export ds="$HOME/Documents/academia/teaching/data-science/"
 

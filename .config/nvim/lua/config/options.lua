@@ -41,6 +41,8 @@ vim.opt.softtabstop = 2 -- number of spaces a tab counts when editing
 vim.opt.expandtab = true -- transform tab to spaces
 vim.opt.wrap = false -- disable wrap lines
 vim.opt.breakindent = true -- keep wraped lines indented
+vim.opt.textwidth = 0
+vim.opt.formatoptions = vim.opt.formatoptions - "t"
 
 -- netrw 
 -- vim.g.netrw_altv = 1
