@@ -12,8 +12,17 @@ alias vim="nvim"
 alias vimdiff="nvim -d"
 alias cat=bat
 alias noise="play -n -q synth 2:0:0 brownnoise synth pinknoise mix synth sine amod 0 10 &"
-alias pysh="source .venv/bin/activate"
 alias ipython="ipython --no-autoindent --ipython-dir=$HOME/.config/ipython --profile=$USER"
+alias en="source .venv/bin/activate"
+
+py() {
+  (
+    source .venv/bin/activate
+    nvim -c "autocmd VimEnter * lua vim.defer_fn(function()
+      require('telescope.builtin').find_files()
+    end, 50)"
+  )
+}
 
 # Check if Homebrew exists
 if [ -x "/opt/homebrew/bin/brew" ]; then
