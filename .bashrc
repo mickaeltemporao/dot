@@ -1,8 +1,13 @@
-# PROMPT_COMMAND="PS1_CMD1=$(git branch --show-current 2>/dev/null)"; PS1="\[\e[38;5;125;1m\]\u\[\e[0m\]@\[\e[38;5;31m\]\h\[\e[0m\] \[\e[38;5;119;1m\]\w\[\e[0m\] \[\e[38;5;199;53m\]${PS1_CMD1}\n\[\e[0m\]\$ "
+# The Gitted prompt...
+source /usr/share/git/completion/git-prompt.sh
+export GIT_PS1_SHOWDIRTYSTATE=1
 
-# if [ -f ~/.local/bin/sensible.bash ]; then
-#    source ~/.local/bin/sensible.bash
-# fi
+BLUE='\[\e[34m\]'
+GRAY='\[\e[37m\]'
+RESET='\[\e[0m\]'
+
+PROMPT_COMMAND='__prompt_git="$(__git_ps1 " [%s]")"'
+PS1="${BLUE}\W${RESET}${GRAY}\${__prompt_git}${RESET} \$ "
 
 alias dot="/usr/bin/git --git-dir=$HOME/.dot/ --work-tree=$HOME"
 alias ls="ls -lah --color=auto"
@@ -10,7 +15,7 @@ alias grep="grep --color=auto"
 alias vi="nvim"
 alias vim="nvim"
 alias vimdiff="nvim -d"
-alias cat=bat
+alias bat="bat --paging=never"
 alias noise="play -n -q synth 2:0:0 brownnoise synth pinknoise mix synth sine amod 0 10 &"
 alias ipython="ipython --no-autoindent --ipython-dir=$HOME/.config/ipython --profile=$USER"
 alias en="source .venv/bin/activate"
@@ -24,24 +29,21 @@ py() {
   )
 }
 
-# Check if Homebrew exists
-if [ -x "/opt/homebrew/bin/brew" ]; then
-    # Homebrew is installed → set up shell environment
-    eval "$(/opt/homebrew/bin/brew shellenv)"
+# Helping mac users...
+if command -v brew >/dev/null 2>&1; then
+    eval "$(brew shellenv)"
+
+    [[ -s "$HOMEBREW_PREFIX/etc/profile.d/bash_completion.sh" ]] &&
+        . "$HOMEBREW_PREFIX/etc/profile.d/bash_completion.sh"
 else
-    # Homebrew not found → set alias for open
     alias open="xdg-open"
 fi
 
-if [[ -s $HOMEBREW_PREFIX/etc/profile.d/bash_completion.sh ]]; then
-  . "$HOMEBREW_PREFIX/etc/profile.d/bash_completion.sh"
-fi
-
+# Some utils
 eval "$(pyenv init -)"
 eval "$(fzf --bash)"
 
 # Adds `~/.local/bin` to $PATH
 export PATH="$HOME/.local/bin:$PATH"
-
 # vim-gnupg
 export GPG_TTY=$(tty)
