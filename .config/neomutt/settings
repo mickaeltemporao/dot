@@ -1,0 +1,75 @@
+# ----------------------------------------------------
+# Cache Configuration (LMDB per-folder database)
+# ----------------------------------------------------
+set header_cache_backend = "lmdb"
+set header_cache = "~/.cache/neomutt/headers"
+set message_cache_dir = "~/.cache/neomutt/bodies"
+
+# ----------------------------------------------------
+# Quality of Life
+# ----------------------------------------------------
+set sort = threads
+set sort_aux = reverse-last-date-received
+set date_format="%y/%m/%d %I:%M%p"
+set index_format="%4C %Z %[%b %d %H:%M] %-15.15L (%?l?%4l&%4c?) %s"
+
+# ====================================================
+# Core Maildir Behavior
+# ====================================================
+set mbox_type = Maildir
+set delete = yes            # Automatically purge deleted messages without asking
+set confirmappend = no      # Don't ask for validation when moving/archiving emails
+set wait_key = no           # Never pause and ask to "Press any key"
+set move = no               # Don't prompt to move read emails to mbox on exit
+set fast_reply = yes        # Skip the "To:" prompt when replying
+set include = yes           # Auto-quote the original message when replying
+set sig_on_top = yes        # Place signature directly below reply (above quoted text)
+unset sig_dashes            # Omit the '-- ' separator before signature
+set pager_stop = yes        # Don't jump to the next email when hitting bottom of pager
+set pager_read_delay = 3    # Delay (in seconds) before marking viewed emails as read
+set markers = no            # Remove the ugly '+' signs on wrapped lines
+set smart_wrap = yes        # Wrap text cleanly at word boundaries
+unset mark_old              # read/new is enough 
+set editor = "nvim +':set textwidth=0'"
+set text_flowed = yes
+
+# Maildir & Cache Resilience (Prevents segfaults on background syncs)
+set mail_check = 5                       # Check for maildir changes every 5 seconds
+set timeout = 10                         # Refresh index after 10s of keypress inactivity
+set check_new = yes                      # Ensure file changes in Maildir are scanned
+set maildir_header_cache_verify = yes    # Validate cache against disk to prevent null pointers
+
+# ----------------------------------------------------
+# Sidebar Configuration
+# ----------------------------------------------------
+set mail_check_stats = yes
+set mail_check_stats_interval = 30
+set sidebar_visible = yes
+set sidebar_width = 30
+set sidebar_short_path = yes
+set sidebar_folder_indent = no
+set sidebar_format = "%D%* %?N?%N?"
+set auto_tag = yes
+
+# ----------------------------------------------------
+# HTML / Mailcap Configuration
+# ----------------------------------------------------
+set mailcap_path = ~/.config/neomutt/mailcap
+auto_view text/html text/calendar
+alternative_order text/calendar text/html text/plain
+
+# Outbound Email Dispatcher
+set sendmail = "~/.config/neomutt/smart_sendmail.py"
+
+# Reset X-Send-At header before composing any message so scheduling never persists across emails
+send-hook . 'unmy_hdr X-Send-At'
+
+# ----------------------------------------------------
+# Contacts & Address Autocompletion (Khard)
+# ----------------------------------------------------
+set query_command = "khard email --parsable %s"
+set query_format = "%4c %t %-25.25n %-25.25a %e"
+bind editor <Tab> complete-query
+bind editor ^T complete-query
+
+

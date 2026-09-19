@@ -1,0 +1,26 @@
+# ====================================================
+# NeoMutt Main Configuration
+# ====================================================
+
+# 1. Source modular files
+source ~/.config/neomutt/settings
+source ~/.config/neomutt/colors
+source ~/.config/neomutt/mappings
+
+# 2. Account Hooks (Dynamic Switching)
+# `folder-hook` runs when you actually open/enter the folder (swaps UI & Sending configs)
+folder-hook '~/Mail/work' 'source ~/.config/neomutt/accounts/work'
+folder-hook '~/Mail/personal' 'source ~/.config/neomutt/accounts/personal'
+
+# 3. Mailboxes (Populates the Sidebar)
+mailboxes -label "▼ WORK" "~/Mail/work/INBOX"
+mailboxes -nopoll -label "  Sent" "~/Mail/work/Sent"
+mailboxes -nopoll -label "  Drafts" "~/Mail/work/Drafts"
+
+mailboxes -label "▼ PERSONAL" "~/Mail/personal/INBOX"
+mailboxes -nopoll -label "  Sent" "~/Mail/personal/[Gmail]/Sent Mail"
+mailboxes -nopoll -label "  Drafts" "~/Mail/personal/[Gmail]/Drafts"
+
+# 4. Default account on startup
+source ~/.config/neomutt/accounts/work
+push "<change-folder>~/Mail/work/INBOX<enter>"

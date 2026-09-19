@@ -1,0 +1,49 @@
+# ----------------------------------------------------
+# External Tool Mappings
+# ----------------------------------------------------
+# URL Extractor (requires 'urlscan' to be installed)
+macro pager \cb "<pipe-message>urlscan<enter>" "Extract and follow URLs"
+
+# Open HTML part in Web Browser
+macro index,pager H "<pipe-message>~/.config/neomutt/open_browser.py --html<enter>" "Open HTML part in Web Browser"
+
+# Add Calendar Invite (.ics) to Google Calendar in Web Browser
+macro index,pager I "<pipe-message>~/.config/neomutt/open_browser.py --gcal<enter>" "Add invite to Google Calendar"
+
+# sidebar mappings
+bind index,pager \Ck sidebar-prev
+bind index,pager \Cj sidebar-next
+bind index,pager \Co sidebar-open
+bind index,pager \Cp sidebar-prev-new
+bind index,pager \Cn sidebar-next-new
+bind index,pager B sidebar-toggle-visible
+
+# ----------------------------------------------------
+# Pager Navigation / Scroll Prevention
+# ----------------------------------------------------
+# By default in pager, <Down> jumps to the next email (<next-undeleted>),
+# which causes mouse/trackpad scrolling to skip through and mark emails as read.
+# Scroll line-by-line instead:
+bind pager <up> previous-line
+bind pager <down> next-line
+# To completely disable arrow/wheel scrolling in pager instead, uncomment:
+# bind pager <up> noop
+# bind pager <down> noop
+
+# ----------------------------------------------------
+# Compose Menu Shortcuts
+# ----------------------------------------------------
+# Press Shift+Y (Y) in compose menu to prompt with pre-filled YYYY-MM-DD 08:00 date
+macro compose Y "<enter-command>my_hdr X-Send-At: `date -d 'tomorrow 08:00' +'%Y-%m-%d %H:%M'`" "Prompt for schedule send time (pre-filled with YYYY-MM-DD 08:00)"
+
+# ----------------------------------------------------
+# Contacts Shortcuts (Khard)
+# ----------------------------------------------------
+# Press 'A' in index or pager to add sender/recipient to Khard address book
+macro index,pager A "<pipe-message>khard add-email<enter>" "Add contact to address book"
+
+# ----------------------------------------------------
+# Sync Shortcuts (mbsync)
+# ----------------------------------------------------
+# Press 'G' (Shift+G) in index or pager to force sync all mailboxes and refresh NeoMutt
+macro index,pager G "<shell-escape>~/.config/isync/sync-mail.sh<enter><check-stats><refresh>" "Sync all mailboxes"

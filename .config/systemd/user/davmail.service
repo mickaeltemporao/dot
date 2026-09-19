@@ -1,0 +1,13 @@
+[Unit]
+Description=DavMail Exchange Gateway
+After=network.target network-online.target
+
+[Service]
+Type=simple
+Environment="JAVA_OPTS=-Djava.net.preferIPv4Stack=true"
+ExecStart=/usr/bin/env davmail %h/.config/davmail.properties
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target

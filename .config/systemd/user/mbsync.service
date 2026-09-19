@@ -1,0 +1,14 @@
+[Unit]
+Description=Mailbox synchronization service
+After=network.target network-online.target
+
+[Service]
+Type=oneshot
+# This calls the robust, parallel retry script we just made!
+ExecStart=/home/mt/.config/isync/sync-mail.sh
+
+# CRITICAL for 'pass' (GPG). If your GPG key is locked, these variables
+# allow the gpg-agent to securely pop up a graphical password prompt (pinentry)
+# on your screen so the background sync doesn't just silently fail.
+Environment="DISPLAY=:0"
+Environment="DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/%U/bus"

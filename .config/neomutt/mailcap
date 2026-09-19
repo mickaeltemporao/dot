@@ -1,0 +1,21 @@
+# HTML (Interactive: opens in Firefox/Chrome when you press 'm' in attachment view)
+text/html; xdg-open %s; test=test -n "$DISPLAY"; nametemplate=%s.html
+# HTML (Inline: renders in NeoMutt pager automatically)
+text/html; w3m -I %{charset} -T text/html -dump %s; copiousoutput
+
+# Calendar Invites (.ics)
+text/calendar; mutt-ics %s; copiousoutput
+
+# PDF
+application/pdf; zathura %s
+
+# Images
+image/*; sxiv %s
+
+# MS Office (Word, Excel, PowerPoint)
+application/msword; libreoffice %s
+application/vnd.openxmlformats-officedocument.wordprocessingml.document; libreoffice %s
+application/vnd.ms-excel; libreoffice %s
+application/vnd.openxmlformats-officedocument.spreadsheetml.sheet; libreoffice %s
+application/vnd.ms-powerpoint; libreoffice %s
+application/vnd.openxmlformats-officedocument.presentationml.presentation; libreoffice %s

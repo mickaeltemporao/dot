@@ -1,0 +1,22 @@
+[calendars]
+
+[[work]]
+path = ~/.local/share/calendars/work/
+color = dark blue
+priority = 10
+
+[[personal]]
+path = ~/.local/share/calendars/personal/
+color = dark green
+priority = 20
+
+[locale]
+timeformat = %H:%M
+dateformat = %d/%m/%Y
+longdateformat = %d/%m/%Y
+datetimeformat = %d/%m/%Y %H:%M
+longdatetimeformat = %d/%m/%Y %H:%M
+firstweekday = 0
+
+[default]
+default_calendar = work

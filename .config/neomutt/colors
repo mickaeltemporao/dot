@@ -1,0 +1,48 @@
+# ----------------------------------------------------
+# Tokyo Night Theme for NeoMutt (256-color safe)
+# ----------------------------------------------------
+
+# Basic Interface
+color normal        color252 default
+color error         color203 default
+color tilde         color60 default
+color message       color117 default
+color attachment    color141 default
+color search        color215 default
+color status        color252 color234
+color indicator     color234 color111  # The email selection cursor
+color progress      color234 color117
+
+# Sidebar
+color sidebar_divider    color60 default
+color sidebar_flagged    color203 default
+color sidebar_new        color114 default
+color sidebar_highlight  color179 default  # The sidebar cursor (hover)
+color sidebar_indicator  color234 color141 # The CURRENTLY OPEN mailbox
+
+# Index List (The list of emails)
+color index         color252 default '.*'
+color index_author  color141 default '.*'
+color index_subject color111 default '.*'
+color index_number  color60 default
+
+# Unread emails
+color index         color179 default "~N"
+color index_author  color114 default "~N"
+color index_subject color252 default "~N"
+
+# Email Header View
+color hdrdefault    color60 default
+color header        color111 default "^(From)"
+color header        color117 default "^(Subject)"
+color header        color141 default "^(CC|BCC|To)"
+
+# Email Body View
+color quoted        color114 default
+color quoted1       color117 default
+color quoted2       color111 default
+color signature     color60 default
+
+# Regex Highlights in Body
+color body          color215 default "[\-\.+_a-zA-Z0-9]+@[\-\.a-zA-Z0-9]+" # Emails
+color body          color111 default "(https?|ftp)://[\-\.,/%~_:?&=\#a-zA-Z0-9]+" # URLs

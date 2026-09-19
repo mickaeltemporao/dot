@@ -1,0 +1,5 @@
+R_HOME_USER = ${HOME}/.config/r/
+R_LIBS_USER = ${HOME}/.local/share/R/library
+R_PROFILE_USER = ${HOME}/.config/r/.Rprofile
+R_HISTFILE = ${HOME}/.config/r/.Rhistory
+MYSQL_HOME = /var/lib/mysql

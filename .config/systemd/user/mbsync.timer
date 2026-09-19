@@ -1,0 +1,12 @@
+[Unit]
+Description=Mailbox synchronization timer
+
+[Timer]
+# Wait 2 minutes after you log in to do the first sync (gives network time to connect)
+OnBootSec=2m
+# Run the sync every 2 minutes
+OnUnitActiveSec=2m
+Unit=mbsync.service
+
+[Install]
+WantedBy=timers.target

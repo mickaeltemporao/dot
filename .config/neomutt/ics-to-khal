@@ -1,0 +1,276 @@
+#!/usr/bin/env python3
+"""
+Interactive Calendar Invite Responder for NeoMutt
+- Reads an email with an .ics invite from standard input.
+- Displays the event details (Title, Organizer, Time, Location, Description).
+- Prompts the user:
+    [a] Accept           (Import to calendar & send Accept reply)
+    [t] Tentative/Maybe  (Import to calendar & send Tentative reply)
+    [d] Decline          (Send Decline reply)
+    [i] Import only      (Add to calendar without sending reply)
+    [q] Cancel / Quit
+- On Accept / Tentative:
+    1. Imports the event into the selected Khal calendar (work or personal).
+    2. Sends an RFC 5546 standard iCalendar REPLY to the organizer with PARTSTAT=ACCEPTED or TENTATIVE.
+- On Decline:
+    1. Sends an RFC 5546 standard iCalendar REPLY with PARTSTAT=DECLINED.
+"""
+
+import sys
+import os
+import re
+import email
+from email.message import EmailMessage
+import tempfile
+import subprocess
+import datetime
+import icalendar
+
+def log(msg):
+    log_file = os.path.expanduser("~/.config/neomutt/schedule.log")
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    line = f"[{timestamp}] [cal-responder] {msg}\n"
+    try:
+        with open(log_file, "a", encoding="utf-8") as f:
+            f.write(line)
+    except Exception:
+        pass
+
+def format_cal_datetime(dt_val):
+    if dt_val is None:
+        return "N/A"
+    dt = dt_val.dt if hasattr(dt_val, 'dt') else dt_val
+    if isinstance(dt, datetime.datetime):
+        return dt.strftime("%A, %d %B %Y at %H:%M %Z").strip()
+    elif isinstance(dt, datetime.date):
+        return dt.strftime("%A, %d %B %Y (All day)")
+    return str(dt)
+
+def clean_email(addr_str):
+    if not addr_str:
+        return ""
+    addr = re.sub(r'(?i)^mailto:', '', str(addr_str).strip())
+    m = re.search(r'<([^>]+)>', addr)
+    if m:
+        return m.group(1).strip()
+    return addr.strip()
+
+def main():
+    target_cal = sys.argv[1] if len(sys.argv) > 1 else "work"
+    raw_email = sys.stdin.buffer.read()
+    msg = email.message_from_bytes(raw_email)
+
+    ics_content = None
+    for part in msg.walk():
+        content_type = part.get_content_type()
+        if content_type in ['text/calendar', 'application/ics']:
+            payload = part.get_payload(decode=True)
+            if payload:
+                ics_content = payload
+                break
+
+    if not ics_content:
+        if b"BEGIN:VCALENDAR" in raw_email:
+            start_idx = raw_email.find(b"BEGIN:VCALENDAR")
+            end_idx = raw_email.find(b"END:VCALENDAR")
+            if start_idx != -1 and end_idx != -1:
+                ics_content = raw_email[start_idx:end_idx + len(b"END:VCALENDAR")]
+
+    if not ics_content:
+        print("\n[!] No calendar invite (.ics) found in this email.")
+        sys.exit(1)
+
+    try:
+        cal = icalendar.Calendar.from_ical(ics_content)
+    except Exception as e:
+        print(f"\n[!] Failed to parse calendar invite: {e}")
+        sys.exit(1)
+
+    event = None
+    for comp in cal.walk('VEVENT'):
+        event = comp
+        break
+
+    if not event:
+        print("\n[!] No event component (VEVENT) found in calendar attachment.")
+        sys.exit(1)
+
+    summary = str(event.get('summary', 'No Title'))
+    organizer_raw = str(event.get('organizer', ''))
+    organizer = clean_email(organizer_raw)
+    organizer_name = ''
+    if event.get('organizer') and hasattr(event.get('organizer'), 'params'):
+        organizer_name = event.get('organizer').params.get('cn', '')
+    dtstart = event.get('dtstart')
+    dtend = event.get('dtend')
+    location = str(event.get('location', '')).strip()
+    description = str(event.get('description', '')).strip()
+    uid = str(event.get('uid', ''))
+
+    if target_cal == "personal":
+        user_name = "Mickael Temporão"
+        user_email = "mickael.temporao@gmail.com"
+    else:
+        user_name = "Mickael Temporão"
+        user_email = "m.temporao@sciencespobordeaux.fr"
+
+    try:
+        tty_in = open("/dev/tty", "r")
+        tty_out = open("/dev/tty", "w")
+    except Exception:
+        tty_in = sys.stdin
+        tty_out = sys.stdout
+
+    def tty_print(s=""):
+        tty_out.write(s + "\n")
+        tty_out.flush()
+
+    tty_print("")
+    tty_print("=" * 64)
+    tty_print(f"  CALENDAR INVITE: {summary}")
+    tty_print("=" * 64)
+    tty_print(f"Organizer : {organizer_name + ' <' + organizer + '>' if organizer_name else organizer}")
+    tty_print(f"Start     : {format_cal_datetime(dtstart)}")
+    tty_print(f"End       : {format_cal_datetime(dtend)}")
+    if location:
+        tty_print(f"Location  : {location}")
+    if description:
+        desc_lines = [l for l in description.splitlines() if l.strip()]
+        desc_preview = "\n            ".join(desc_lines[:3])
+        if desc_preview:
+            tty_print(f"Details   : {desc_preview}")
+    tty_print(f"Calendar  : {target_cal.upper()} ({user_email})")
+    tty_print("-" * 64)
+    tty_print("Choose an action:")
+    tty_print("  [a] Accept           (Import to calendar & send Accept reply)")
+    tty_print("  [t] Tentative / Maybe(Import to calendar & send Tentative reply)")
+    tty_print("  [d] Decline          (Send Decline reply)")
+    tty_print("  [i] Import only      (Add to calendar without sending reply)")
+    tty_print("  [q] Cancel / Quit")
+    tty_print("-" * 64)
+
+    choice = ""
+    while choice not in ['a', 't', 'd', 'i', 'q']:
+        tty_out.write("Select [a/t/d/i/q]: ")
+        tty_out.flush()
+        line = tty_in.readline()
+        if not line:
+            choice = 'q'
+            break
+        choice = line.strip().lower()
+
+    if choice == 'q':
+        tty_print("Action cancelled.")
+        return
+
+    partstat = None
+    if choice == 'a':
+        partstat = "ACCEPTED"
+    elif choice == 't':
+        partstat = "TENTATIVE"
+    elif choice == 'd':
+        partstat = "DECLINED"
+
+    # 1. Handle Calendar Import (Accept, Tentative, or Import only)
+    if choice in ['a', 't', 'i']:
+        with tempfile.NamedTemporaryFile(suffix='.ics', delete=False) as f:
+            f.write(ics_content)
+            ics_path = f.name
+        try:
+            res = subprocess.run(
+                ['khal', 'import', '--batch', '-a', target_cal, ics_path],
+                capture_output=True,
+                text=True
+            )
+            if res.returncode == 0:
+                tty_print(f"-> Successfully imported event into '{target_cal}' calendar.")
+            else:
+                err_msg = res.stderr.strip() or res.stdout.strip()
+                tty_print(f"[!] Note: khal import result: {err_msg}")
+        finally:
+            if os.path.exists(ics_path):
+                os.remove(ics_path)
+
+    # 2. Handle Reply Email (Accept, Tentative, Decline)
+    if partstat and organizer:
+        tty_print(f"-> Sending {partstat} response to {organizer}...")
+
+        reply_cal = icalendar.Calendar()
+        reply_cal.add('prodid', '-//NeoMutt Calendar Responder//EN')
+        reply_cal.add('version', '2.0')
+        reply_cal.add('method', 'REPLY')
+
+        reply_event = icalendar.Event()
+        if uid:
+            reply_event.add('uid', uid)
+        reply_event.add('summary', summary)
+        if dtstart:
+            reply_event.add('dtstart', dtstart.dt if hasattr(dtstart, 'dt') else dtstart)
+        if dtend:
+            reply_event.add('dtend', dtend.dt if hasattr(dtend, 'dt') else dtend)
+        reply_event.add('organizer', icalendar.vCalAddress(f"mailto:{organizer}"))
+
+        attendee = icalendar.vCalAddress(f"mailto:{user_email}")
+        attendee.params['partstat'] = icalendar.vText(partstat)
+        attendee.params['cn'] = icalendar.vText(user_name)
+        attendee.params['role'] = icalendar.vText('REQ-PARTICIPANT')
+        reply_event.add('attendee', attendee)
+
+        reply_event.add('dtstamp', datetime.datetime.now(datetime.timezone.utc))
+        reply_cal.add_component(reply_event)
+
+        ics_reply_bytes = reply_cal.to_ical()
+
+        reply_msg = EmailMessage()
+        subject_status = "Accepted" if partstat == "ACCEPTED" else ("Tentative" if partstat == "TENTATIVE" else "Declined")
+        orig_subj = msg.get('Subject', '')
+        clean_subj = re.sub(r'(?i)^(re:\s*)+', '', orig_subj).strip()
+        reply_msg['Subject'] = f"{subject_status}: {clean_subj or summary}"
+        reply_msg['From'] = f"{user_name} <{user_email}>"
+        reply_msg['To'] = f"{organizer_name} <{organizer}>" if organizer_name else organizer
+
+        orig_msg_id = msg.get('Message-ID')
+        if orig_msg_id:
+            reply_msg['In-Reply-To'] = orig_msg_id
+            reply_msg['References'] = orig_msg_id
+
+        body_text = f"{user_name} has {subject_status.lower()}: {summary}\n\nWhen: {format_cal_datetime(dtstart)}\n"
+        reply_msg.set_content(body_text)
+
+        reply_msg.add_attachment(
+            ics_reply_bytes,
+            maintype='text',
+            subtype='calendar',
+            filename='invite.ics',
+            params={'method': 'REPLY', 'charset': 'UTF-8'}
+        )
+
+        raw_reply_bytes = reply_msg.as_bytes()
+
+        sendmail_script = os.path.expanduser("~/.config/neomutt/smart_sendmail.py")
+        env = os.environ.copy()
+        env["PASSWORD_STORE_DIR"] = "/home/mt/.config/passwords"
+        env["PATH"] = f"/usr/local/bin:/usr/bin:/bin:{env.get('PATH', '')}"
+
+        proc = subprocess.Popen(
+            [sys.executable, sendmail_script],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=env
+        )
+        stdout, stderr = proc.communicate(input=raw_reply_bytes)
+
+        if proc.returncode == 0:
+            tty_print(f"-> Response sent successfully ({partstat})!")
+            log(f"Response {partstat} for '{summary}' sent to {organizer}")
+        else:
+            err_msg = stderr.decode('utf-8', errors='ignore').strip()
+            tty_print(f"[!] Error sending reply: {err_msg}")
+            log(f"Failed to send {partstat} to {organizer}: {err_msg}")
+
+    tty_print("Finished. Press Enter to return to NeoMutt.")
+    tty_in.readline()
+
+if __name__ == '__main__':
+    main()
