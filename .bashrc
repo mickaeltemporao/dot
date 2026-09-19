@@ -1,57 +1,16 @@
-export GPG_TTY=$(tty)
-export HISTCONTROL=ignoreboth
+# ~/.bashrc - Interactive Bash Configuration Loader
+# Individual modules managed under ~/.config/bash/
 
-# The Gitted prompt...
-source /usr/share/git/completion/git-prompt.sh
-export GIT_PS1_SHOWDIRTYSTATE=1
+# Non-interactive shells exit early
+[[ $- != *i* ]] && return
 
-BLUE='\[\e[34m\]'
-GRAY='\[\e[37m\]'
-RESET='\[\e[0m\]'
-
-PROMPT_COMMAND='__prompt_git="$(__git_ps1 " [%s]")"'
-PS1="${BLUE}\W${RESET}${GRAY}\${__prompt_git}${RESET} \$ "
-
-# Fun with aliases
-alias dot="/usr/bin/git --git-dir=$HOME/.dot/ --work-tree=$HOME"
-alias ls="ls -lah --color=auto"
-alias grep="grep --color=auto"
-alias vi="nvim"
-alias vim="nvim"
-alias vimdiff="nvim -d"
-alias bat="bat --paging=never"
-alias noise="play -n -q synth 2:0:0 brownnoise synth pinknoise mix synth sine amod 0 10 &"
-alias ipython="ipython --no-autoindent --ipython-dir=$HOME/.config/ipython --profile=$USER"
-alias en="source .venv/bin/activate"
-alias nm="neomutt"
-
-# Tab completion for the 'dot' config
-if [ -f /usr/share/bash-completion/completions/git ]; then
-    source /usr/share/bash-completion/completions/git
-    __git_complete dot __git_main
+# Source modular components in alphabetical/numerical order
+if [ -d "$HOME/.config/bash" ]; then
+    for _mod in "$HOME/.config/bash"/*.bash; do
+        if [ -r "$_mod" ]; then
+            # shellcheck source=/dev/null
+            source "$_mod"
+        fi
+    done
+    unset _mod
 fi
-
-# Some python sugar
-py() {
-  (
-    source .venv/bin/activate
-    nvim -c "autocmd VimEnter * lua vim.defer_fn(function()
-      require('telescope.builtin').find_files()
-    end, 50)"
-  )
-}
-
-# Helping Mac-ers...
-if command -v brew >/dev/null 2>&1; then
-    eval "$(brew shellenv)"
-
-    [[ -s "$HOMEBREW_PREFIX/etc/profile.d/bash_completion.sh" ]] &&
-        . "$HOMEBREW_PREFIX/etc/profile.d/bash_completion.sh"
-else
-    alias open="xdg-open"
-fi
-
-# Some utils
-eval "$(pyenv init -)"
-eval "$(fzf --bash)"
-
