@@ -15,7 +15,7 @@ fi
 if tmux has-session -t "$session" 2>/dev/null; then
     attached=$(tmux display-message -p -t "$session" '#{session_attached}' 2>/dev/null || echo "0")
     if [ "$attached" -gt 0 ]; then
-        exec tmux new-session -t "$session"
+        exec tmux new-session -t "$session" \; new-window
     else
         exec tmux attach-session -t "$session"
     fi
