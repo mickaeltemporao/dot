@@ -16,8 +16,7 @@
     frame_width = 2
     frame_color = "#f5b700"
     separator_color = frame
-    sort = yes
-    font = JetBrainsMono Nerd Font 11
+    font = Input Sans 11
     line_height = 3
     markup = full
     format = "<b>%s</b>\n%b"
