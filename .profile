@@ -16,6 +16,13 @@ if command -v pyenv >/dev/null 2>&1; then
     eval "$(pyenv init --path)"
 fi
 
+# Source interactive bash configuration if running interactively under bash
+if [ -n "$BASH_VERSION" ] && [ -f "$HOME/.bashrc" ]; then
+    case "$-" in
+        *i*) . "$HOME/.bashrc" ;;
+    esac
+fi
+
 # Auto-start X11 on TTY1 login
 if [ -z "${DISPLAY}" ] && [ "${XDG_VTNR:-0}" -eq 1 ]; then
     exec startx

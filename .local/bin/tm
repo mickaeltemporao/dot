@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# ~/.local/bin/tm - Minimal tmux session attach & launcher with grouped session support
+set -euo pipefail
+
+session="${1:-main}"
+
+if [ -n "${TMUX:-}" ]; then
+    if tmux has-session -t "$session" 2>/dev/null; then
+        exec tmux switch-client -t "$session"
+    else
+        exec tmux new-session -d -s "$session" && exec tmux switch-client -t "$session"
+    fi
+fi
+
+if tmux has-session -t "$session" 2>/dev/null; then
+    attached=$(tmux display-message -p -t "$session" '#{session_attached}' 2>/dev/null || echo "0")
+    if [ "$attached" -gt 0 ]; then
+        exec tmux new-session -t "$session"
+    else
+        exec tmux attach-session -t "$session"
+    fi
+else
+    exec tmux new-session -s "$session"
+fi
