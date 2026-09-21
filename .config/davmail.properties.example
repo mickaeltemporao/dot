@@ -1,0 +1,27 @@
+# DavMail POP/IMAP/SMTP/CalDAV/LDAP Exchange Gateway Configuration Template
+# Documentation: https://davmail.sourceforge.net/advanced.html
+
+# Security: Bind exclusively to local loopback (Never 0.0.0.0)
+davmail.bindAddress=127.0.0.1
+
+# Exchange O365 / OWA Endpoint
+# E.g. https://outlook.office365.com/EWS/Exchange.asmx
+# Or institutional: https://mail.your-institution.edu/owa/
+davmail.url=https://outlook.office365.com/EWS/Exchange.asmx
+
+# Protocol Ports
+davmail.imapPort=1143
+davmail.smtpPort=1025
+davmail.caldavPort=1080
+davmail.popPort=
+davmail.ldapPort=
+
+# Service Options
+davmail.server=true
+davmail.enableKeepAlive=true
+davmail.folderSizeLimit=0
+
+# Logging & Performance
+davmail.logFilePath=~/.local/state/davmail.log
+log4j.logger.davmail=WARN
+log4j.logger.org.apache.http.wire=WARN

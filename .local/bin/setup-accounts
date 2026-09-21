@@ -1,0 +1,43 @@
+#!/bin/bash
+set -euo pipefail
+
+# setup-accounts: Initialize private configuration files from .example templates
+# Enforces strict 0600 file and 0700 directory permissions.
+
+echo "==> Initializing private configuration files from .example templates..."
+
+copy_template() {
+    local src="$1"
+    local dst="$2"
+    local mode="${3:-600}"
+
+    if [ ! -f "$src" ]; then
+        echo "[-] Template not found: $src"
+        return 1
+    fi
+
+    if [ -f "$dst" ]; then
+        echo "[=] File already exists, skipping: $dst"
+    else
+        echo "[+] Creating: $dst (mode $mode)"
+        mkdir -p "$(dirname "$dst")"
+        cp "$src" "$dst"
+        chmod "$mode" "$dst"
+    fi
+}
+
+# Enforce secure directory boundaries (0700)
+mkdir -p ~/.config/msmtp ~/.config/isync ~/.config/neomutt/accounts ~/.config/vdirsyncer
+chmod 700 ~/.config/msmtp ~/.config/isync ~/.config/neomutt ~/.config/vdirsyncer
+
+# Instantiate config files (0600)
+copy_template ~/.config/davmail.properties.example ~/.config/davmail.properties 600
+copy_template ~/.config/isync/mbsyncrc.example ~/.config/isync/mbsyncrc 600
+copy_template ~/.config/msmtp/config.example ~/.config/msmtp/config 600
+copy_template ~/.config/vdirsyncer/config.example ~/.config/vdirsyncer/config 600
+copy_template ~/.config/neomutt/accounts/work.example ~/.config/neomutt/accounts/work 600
+copy_template ~/.config/neomutt/accounts/personal.example ~/.config/neomutt/accounts/personal 600
+
+echo ""
+echo "[✓] Initialization complete. Sensitive files created with 0600 permissions."
+echo "    Review and edit the active files with your specific usernames and pass paths."

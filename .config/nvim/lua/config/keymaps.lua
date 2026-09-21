@@ -92,6 +92,30 @@ local function search_config()
   }
 end
 
+local function search_mail_templates()
+  local actions = require('telescope.actions')
+  local action_state = require('telescope.actions.state')
+  require('telescope.builtin').find_files {
+    prompt_title = 'Mail Templates',
+    cwd = hm .. '/Documents/code/mails/',
+    attach_mappings = function(prompt_bufnr, _)
+      actions.select_default:replace(function()
+        actions.close(prompt_bufnr)
+        local selection = action_state.get_selected_entry()
+        if selection then
+          local filepath = selection.path
+          if not filepath or filepath == '' then
+            filepath = hm .. '/Documents/code/mails/' .. (selection.value or selection[1])
+          end
+          vim.cmd('read ' .. vim.fn.fnameescape(filepath))
+        end
+      end)
+      return true
+    end,
+  }
+end
+
+
 vim.keymap.set('n', '<leader>r', '<Nop>', { desc = "[R]ender Openrations" })
 
 vim.keymap.set("n", "<leader><CR>", send_line_and_down) -- REPL 
@@ -160,6 +184,7 @@ vim.keymap.set('n', '<leader>gf', require('telescope.builtin').git_files, { desc
 vim.keymap.set('n', '<leader>sG', ':LiveGrepGitRoot<cr>', { desc = '[F]ind by [G]rep on Git Root' })
 vim.keymap.set('n', '<leader>fr', require('telescope.builtin').resume, { desc = '[F]ind [R]esume' })
 vim.keymap.set('n', '<leader>fn', search_notes, { desc = '[F]ind [N]notes' })
+vim.keymap.set('n', '<leader>fm', search_mail_templates, { desc = '[F]ind [M]ail Templates' })
 vim.keymap.set('n', '<leader>f,', search_config, { desc = '[F]ind [C]onfig' })
 vim.keymap.set('n', '<leader>f', '<Nop>', { desc = '[F]ind Operations' })
 -- Diagnostic keymaps

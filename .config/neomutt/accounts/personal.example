@@ -1,0 +1,18 @@
+# ====================================================
+# NeoMutt Account: Personal (e.g. Gmail / Fastmail / IMAP)
+# ====================================================
+
+# Identity
+set from = "personal.email@example.com"
+set realname = "Your Full Name"
+unset signature
+
+# Maildir Mailbox Paths
+set folder = "~/Mail/personal"
+set spoolfile = "+INBOX"
+set postponed = "+[Gmail]/Drafts"
+set record = "+[Gmail]/Sent Mail"
+set trash = "+[Gmail]/Trash"
+
+# Send via msmtp
+set sendmail = "/usr/bin/msmtp -a personal"

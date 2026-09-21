@@ -1,0 +1,53 @@
+# isync/mbsync configuration template
+# Manages synchronization between remote mailboxes and local Maildir
+
+# ====================================================
+# WORK ACCOUNT (Exchange via DavMail)
+# ====================================================
+IMAPAccount work
+Host 127.0.0.1
+Port 1143
+User your.username@institution.org
+PassCmd "pass email/work"
+AuthMechs LOGIN
+SSLType None
+
+IMAPStore work-remote
+Account work
+
+MaildirStore work-local
+SubFolders Verbatim
+Path ~/Mail/work/
+Inbox ~/Mail/work/INBOX
+
+Channel work
+Far :work-remote:
+Near :work-local:
+Patterns *
+Create Both
+SyncState *
+
+# ====================================================
+# PERSONAL ACCOUNT (e.g. IMAP / Gmail)
+# ====================================================
+IMAPAccount personal
+Host imap.example.com
+Port 993
+User personal.email@example.com
+PassCmd "pass email/personal"
+SSLType IMAPS
+
+IMAPStore personal-remote
+Account personal
+
+MaildirStore personal-local
+SubFolders Verbatim
+Path ~/Mail/personal/
+Inbox ~/Mail/personal/INBOX
+
+Channel personal
+Far :personal-remote:
+Near :personal-local:
+Patterns *
+Create Both
+SyncState *

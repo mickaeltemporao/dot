@@ -1,0 +1,27 @@
+# msmtp configuration template
+defaults
+auth on
+tls on
+tls_trust_file /etc/ssl/certs/ca-certificates.crt
+logfile ~/.config/msmtp/msmtp.log
+
+# Work Account (Routed through local DavMail gateway)
+account work
+host 127.0.0.1
+port 1025
+from your.name@work-institution.org
+user your.username@institution.org
+passwordeval "pass email/work"
+tls off
+
+# Personal Account (e.g., standard SMTP)
+account personal
+host smtp.example.com
+port 587
+from personal.email@example.com
+user personal.email@example.com
+passwordeval "pass email/personal"
+tls_starttls on
+
+# Default account
+account default : work

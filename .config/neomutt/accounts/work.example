@@ -1,0 +1,18 @@
+# ====================================================
+# NeoMutt Account: Work (Exchange via DavMail / Local Maildir)
+# ====================================================
+
+# Identity
+set from = "your.name@work-institution.org"
+set realname = "Your Full Name"
+set signature = "~/.config/neomutt/signature_work"
+
+# Maildir Mailbox Paths
+set folder = "~/Mail/work"
+set spoolfile = "+INBOX"
+set postponed = "+Drafts"
+set record = "+Sent"
+set trash = "+Trash"
+
+# Send via msmtp
+set sendmail = "/usr/bin/msmtp -a work"
