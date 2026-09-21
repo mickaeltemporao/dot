@@ -12,3 +12,8 @@ ExecStart=/home/mt/.config/isync/sync-mail.sh
 # on your screen so the background sync doesn't just silently fail.
 Environment="DISPLAY=:0"
 Environment="DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/%U/bus"
+
+# Security Sandboxing
+NoNewPrivileges=true
+ProtectSystem=strict
+PrivateTmp=true

@@ -9,5 +9,10 @@ ExecStart=/usr/bin/env davmail %h/.config/davmail.properties
 Restart=always
 RestartSec=10
 
+# Security Sandboxing
+NoNewPrivileges=true
+ProtectSystem=strict
+PrivateTmp=true
+
 [Install]
 WantedBy=default.target

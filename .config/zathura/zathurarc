@@ -1,1 +1,24 @@
 set selection-clipboard clipboard
+
+# NY Taxi Dark Theme
+set recolor true
+set recolor-keephue true
+set recolor-darkcolor "#e6e8eb"
+set recolor-lightcolor "#101214"
+
+set default-bg "#101214"
+set default-fg "#e6e8eb"
+
+set statusbar-bg "#181a1d"
+set statusbar-fg "#e6e8eb"
+
+set inputbar-bg "#101214"
+set inputbar-fg "#f5b700"
+
+set notification-error-bg "#e06c75"
+set notification-error-fg "#ffffff"
+set notification-warning-bg "#f5b700"
+set notification-warning-fg "#101214"
+
+set highlight-color "rgba(245, 183, 0, 0.3)"
+set highlight-active-color "rgba(255, 209, 59, 0.5)"

@@ -1,6 +1,6 @@
 -- Color highlighter
 return { 
-  "norcalli/nvim-colorizer.lua",
+  "NvChad/nvim-colorizer.lua",
   opts = 
     { 
       css = { css_fn = true, css = true },

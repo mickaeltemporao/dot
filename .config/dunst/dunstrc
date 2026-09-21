@@ -1,3 +1,46 @@
 [global]
     origin = top-right
-    offset = 10x10 
+    offset = 15x15
+    width = 340
+    height = 200
+    notification_limit = 5
+    progress_bar = true
+    progress_bar_height = 4
+    progress_bar_frame_width = 1
+    progress_bar_min_width = 150
+    progress_bar_max_width = 300
+    separator_height = 2
+    padding = 12
+    horizontal_padding = 14
+    text_icon_padding = 10
+    frame_width = 2
+    frame_color = "#f5b700"
+    separator_color = frame
+    sort = yes
+    font = JetBrainsMono Nerd Font 11
+    line_height = 3
+    markup = full
+    format = "<b>%s</b>\n%b"
+    alignment = left
+    word_wrap = yes
+    corner_radius = 0
+
+[urgency_low]
+    background = "#101214"
+    foreground = "#6e7681"
+    frame_color = "#23272e"
+    timeout = 4
+
+[urgency_normal]
+    background = "#101214"
+    foreground = "#e6e8eb"
+    frame_color = "#f5b700"
+    highlight = "#f5b700"
+    timeout = 8
+
+[urgency_critical]
+    background = "#181a1d"
+    foreground = "#ffffff"
+    frame_color = "#e06c75"
+    highlight = "#e06c75"
+    timeout = 0

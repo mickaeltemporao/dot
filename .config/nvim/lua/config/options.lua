@@ -20,11 +20,12 @@ vim.opt_global.diffopt:append({ 'vertical' }) -- diff mode always vertical split
 -- general
 vim.opt.clipboard = 'unnamedplus' -- use system clipboard by default
 vim.opt.timeoutlen = 250 -- milliseconds to wait for code sequence
-vim.opt.undodir = os.getenv('HOME') .. '/.config/nvim/undo' -- undo locatoin
+local state_dir = vim.fn.stdpath('state')
+vim.opt.undodir = state_dir .. '/undo' -- persistent undo location in XDG state
 vim.opt.undofile = true -- persistent undo
 vim.opt.undolevels = 10000 -- maximum number of changes that can be undone.
-vim.opt.backup = true --to recover from you can use the backup file directly
-vim.opt_global.backupdir = { os.getenv('HOME') .. '/.config/nvim/backup' }  -- directories for backup file
+vim.opt.backup = true -- to recover from you can use the backup file directly
+vim.opt_global.backupdir = { state_dir .. '/backup' } -- directories for backup file
 vim.opt.backupcopy = 'auto' -- tells neovim how backups are done
 vim.opt.backupext = '.vimbak' -- the extension to be used for vim backup files
 vim.opt.swapfile = true -- enable saving unsaved/unwritten files in a *.swp file
@@ -56,7 +57,7 @@ vim.g.netrw_banner = 0
 -- global variables
 vim.g.mapleader = ' ' -- map leader to space bar
 vim.g.maplocalleader = '\\' -- map local leader to backspace 
-vim.g.python3_host_prog = os.getenv('HOME') .. '/.pyenv/versions/3.13.2/bin/python3' -- python path
+vim.g.python3_host_prog = vim.fn.exepath('python3') ~= '' and vim.fn.exepath('python3') or (os.getenv('HOME') .. '/.pyenv/shims/python3')
 vim.g.loaded_python_provider = 0 -- disable Python2 support
 vim.g.loaded_perl_provider = 0 -- disable perl provider
 vim.g.loaded_ruby_provider = 0 -- disable ruby provider

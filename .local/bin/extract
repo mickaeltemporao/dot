@@ -29,7 +29,7 @@ fi
    for n in "$@"; do
        if [ ! -f "$n" ]; then
            echo "'$n' - file doesn't exist"
-           return 1
+           exit 1
        fi
 
        case "${n%,}" in
@@ -65,7 +65,7 @@ fi
          *.zst)      zstd -d ./"$n"  ;;
          *)
                      echo "extract: '$n' - unknown archive method"
-                     return 1
+                     exit 1
                      ;;
        esac
    done

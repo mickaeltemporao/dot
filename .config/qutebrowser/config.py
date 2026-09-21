@@ -1,12 +1,7 @@
-import draw
+import medallion
 config.load_autoconfig()
 
-draw.blood(c, {
-    'spacing': {
-        'vertical': 6,
-        'horizontal': 8
-    }
-})
+medallion.apply(c)
 
 c.auto_save.session = True
 c.content.autoplay = False

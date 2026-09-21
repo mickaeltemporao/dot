@@ -1,15 +1,16 @@
-#! /usr/bin/env bash
-
-#`Change the Internal Field Separator to split paths correctly
-IFS=':'
+#!/usr/bin/env bash
+set -euo pipefail
 
 get_selection() {
-  for p in $PATH; do
-    ls "$p"
-  done \
-    | fzfmenu
+  (
+    IFS=':'
+    for p in $PATH; do
+      [ -d "$p" ] && find -L "$p" -maxdepth 1 -type f -executable -printf "%f\n" 2>/dev/null
+    done
+  ) | sort -u | fzfmenu
 }
 
-if selection=$( get_selection ); then
+selection=$(get_selection)
+if [ -n "$selection" ]; then
   exec "$selection"
 fi
