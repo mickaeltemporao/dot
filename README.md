@@ -13,6 +13,34 @@ Minimalist, modular, and security-hardened Linux configuration. Tracked using a 
 - **File Management**: `vifm` (with custom image previewers)
 - **Mail & PIM**: NeoMutt, `isync` (`mbsync`), `msmtp`, `davmail`, `khal`, `khard`, `vdirsyncer`
 - **Security & Privacy**: Zero secrets in Git. Passwords managed via `pass` (GnuPG). Account configs separated using sanitized `.example` templates with `0600` permissions.
+- **Theming & Aesthetics**: **Medallion Dark** — Minimalist, high-contrast theme inspired by NYC Medallion Taxis (deep asphalt `#101214` and taxi yellow `#f5b700`).
+
+---
+
+## Theming & Aesthetics: Medallion Dark
+
+The desktop and CLI environment adhere to the **Medallion Dark** palette. Built on a philosophy of **restraint over noise**, the theme rejects multi-colored visual candy in favor of a nocturnal New York City aesthetic: a deep, non-reflective asphalt canvas (`#101214`) punctuated by functional, high-visibility beacons in NYC Taxi Yellow (`#f5b700`) and Canary Yellow (`#ffd13b`). 90% of the interface (inactive borders, tags, status metrics, comments) recedes into muted slate, directing focus exclusively to active work.
+
+### Master Palette
+
+| Color Name | Hex Code | Category | Core Role & Applied Tools |
+| :--- | :--- | :--- | :--- |
+| **Deep Asphalt** | `#101214` | Base Canvas | Universal background (`st`, `dwm`, `tmux`, `nvim`, `qutebrowser`, `zathura`, wallpapers) |
+| **Night Pavement** | `#16181b` / `#181a1d` | Surface Elevation | Floating menus, statusbar elevation, command bars, constructivist wallpaper slabs |
+| **Steel Border** | `#23272e` | Structural Mute | Inactive window borders in `dwm` & `tmux`, split delimiters |
+| **Pavement Seam** | `#2c313a` | Visual Selection | Editor visual selection, subtle fills |
+| **Dark Slate** | `#484f58` | Dividers & Ticks | Pipe separators (`\|`) in tmux statusline, wallpaper coordinate ticks |
+| **Muted Slate** | `#6e7681` | Passive Info | Inactive tags (`dwm`), comments (`nvim`), sysfs status metrics (battery, disk, wifi) |
+| **Off-White** | `#e6e8eb` | Primary Text | Foreground text in all terminals, reader text in `zathura` (90% luminance) |
+| **Pure White** | `#ffffff` | Critical Foreground | Error badges, high-priority notifications in `dunst` |
+| **Medallion Yellow** | `#f5b700` | Signature Hero | Active window borders (`dwm`/`tmux`), active tag (`dwm`), active tab (`qutebrowser`), prompt glyphs |
+| **Canary Yellow** | `#ffd13b` | Spotlight Beacon | Terminal cursor (`st`), search match highlights, glowing Glider nodes |
+| **Warm Amber** | `#ff9800` | Caution / Warning | Compiler warnings, alert status badges, numeric literals |
+| **Subway Green** | `#98c379` | Positive Status | Code strings, git additions, HTTPS security lock, executable files (`vifm`) |
+| **Stoplight Red** | `#e06c75` | Critical Alert | Compiler errors, git deletions, battery critical alerts, broken symlinks |
+| **Street Sign Blue**| `#61afef` | Structural Logic | Functions, identifiers, directory links |
+| **Metro Cyan** | `#56b6c2` | Typographic Accent | Types, operators, technical specifications |
+| **Civic Magenta** | `#c678dd` | Control Flow | Keywords, conditionals, imports, macros |
 
 ---
 

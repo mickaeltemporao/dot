@@ -12,4 +12,5 @@ xcompmgr &
 dunst &
 unclutter &
 udiskie &
-slstatus &
+# Clear status bar (replaced by tmux status)
+xsetroot -name " " &
