@@ -4,12 +4,20 @@ set -euo pipefail
 
 session="${1:-main}"
 
+init_session() {
+    local s="$1"
+    tmux new-session -d -s "$s" -n "terminal" -c "$HOME"
+    tmux new-window -t "$s:2" -n "neomutt" -c "$HOME"
+    tmux send-keys -t "$s:2" "neomutt" C-m
+    tmux new-window -t "$s:3" -n "tmp" -c "/tmp"
+    tmux select-window -t "$s:1"
+}
+
 if [ -n "${TMUX:-}" ]; then
-    if tmux has-session -t "$session" 2>/dev/null; then
-        exec tmux switch-client -t "$session"
-    else
-        exec tmux new-session -d -s "$session" && exec tmux switch-client -t "$session"
+    if ! tmux has-session -t "$session" 2>/dev/null; then
+        init_session "$session"
     fi
+    exec tmux switch-client -t "$session"
 fi
 
 if tmux has-session -t "$session" 2>/dev/null; then
@@ -20,5 +28,6 @@ if tmux has-session -t "$session" 2>/dev/null; then
         exec tmux attach-session -t "$session"
     fi
 else
-    exec tmux new-session -s "$session"
+    init_session "$session"
+    exec tmux attach-session -t "$session"
 fi
