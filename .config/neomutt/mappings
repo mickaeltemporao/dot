@@ -19,6 +19,16 @@ bind index,pager \Cn sidebar-next-new
 bind index,pager B sidebar-toggle-visible
 
 # ----------------------------------------------------
+# Mailbox Navigation
+# ----------------------------------------------------
+# 'c' opens the interactive Mailbox list directly (navigable with j/k and Enter)
+macro index,pager c "<change-folder>?<toggle-mailboxes>" "Browse mailboxes"
+bind index,pager C change-folder
+
+# Jump to current account's INBOX
+macro index,pager ,i "<change-folder>+INBOX<enter>" "Go to INBOX"
+
+# ----------------------------------------------------
 # Pager Navigation / Scroll Prevention
 # ----------------------------------------------------
 # By default in pager, <Down> jumps to the next email (<next-undeleted>),

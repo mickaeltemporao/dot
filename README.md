@@ -44,6 +44,65 @@ The desktop and CLI environment adhere to the **Medallion Dark** palette. Built 
 
 ---
 
+## Keybindings & Core Workflows
+
+Workstation keybindings follow a clear ergonomic hierarchy: `Alt` manages the window manager (`dwm`), `Ctrl` handles tmux pane navigation and NeoMutt sidebar movement, and `,` serves as the non-colliding leader for application-level jumps.
+
+### Window Manager (`dwm`) — `MODKEY = Alt`
+
+| Keybinding | Action | Target / Command |
+| :--- | :--- | :--- |
+| `Alt + Shift + Enter` | Terminal | Standard `st` instance |
+| `Alt + Ctrl + Enter` | Tmux Terminal | `st -e tm` (attaches to or starts `main` tmux session) |
+| `Alt + Enter` | Zoom Master | Swap focused window with master pane |
+| `Alt + j` / `Alt + k` | Focus Stack | Focus next / previous window |
+| `Alt + p` | Run Launcher | `fzfexec` |
+| `Alt + Shift + p` | Pass Menu | `passmenu` (GPG password selector) |
+| `Alt + e` | File Manager | `st -e vifmrun` |
+| `Alt + o` | Document Reader | `zathura /tmp/output.pdf` |
+| `Alt + n` | Quick Notes | `st -e nvim -c WikiIndex` |
+| `Alt + s` | Scratchpad | `scratchpad` toggle |
+| `Alt + w` | Browser Bookmarks | `bkmenu` |
+| `Alt + Shift + w` | Private Browser | `qutebrowser :open -p` |
+| `Alt + b` | Toggle Bar | Show / hide `dwm` top statusbar |
+| `Print` / `Alt + Print` | Screenshot | Full screen (`printscreen`) / Area select (`printarea`) |
+
+### Terminal Multiplexer (`tmux`) — `Prefix = Ctrl-a`
+
+| Keybinding | Scope | Action |
+| :--- | :--- | :--- |
+| `Ctrl-h` / `j` / `k` / `l` | Global | Smart pane navigation (Vim & NeoMutt aware) |
+| `Prefix + v` | Window | Split pane horizontally (`-h`, side-by-side) |
+| `Prefix + h` | Window | Split pane vertically (`-v`, stacked) |
+| `Prefix + c` | Session | Create new window |
+| `Prefix + Ctrl-h` / `Ctrl-l` | Session | Cycle previous / next window |
+| `Prefix + r` | Session | Reload `~/.config/tmux/tmux.conf` |
+
+### Email Client (`neomutt`)
+
+| Keybinding | Menu / Scope | Action |
+| :--- | :--- | :--- |
+| `X` or `,x` | Index / Pager | **Dynamic Account Toggle**: Flips between Work $\leftrightarrow$ Personal INBOX |
+| `c` | Index / Pager | **Mailbox Browser**: Interactive list of all 8 mailboxes (`j`/`k` + `<Enter>`) |
+| `C` | Index / Pager | Native manual path prompt (`<change-folder>`) |
+| `Ctrl-j` / `Ctrl-k` | Index / Pager | Navigate sidebar down / up (passes through tmux) |
+| `Ctrl-o` | Index / Pager | Open selected sidebar mailbox |
+| `B` | Index / Pager | Toggle sidebar visibility |
+| `,a` | Index / Pager | Jump to Archive (`Archive` in Work, `[Gmail]/All Mail` in Personal) |
+| `,s` | Index / Pager | Jump to Sent (`Sent` in Work, `[Gmail]/Sent Mail` in Personal) |
+| `,d` | Index / Pager | Jump to Drafts |
+| `,i` | Index / Pager | Jump to current account's INBOX |
+| `s` | Index / Pager | Instant Archive email (Work: `=Archive`, Personal: `=[Gmail]/All Mail`) |
+| `S` | Index / Pager | Native save/move message prompt (`<save-message>`) |
+| `g` / `r` / `R` | Index / Pager | Default reply actions: `g` (reply-all), `r` (reply to sender), `R` (recall draft) |
+| `G` | Index / Pager | Force sync all mailboxes (`~/.config/isync/sync-mail.sh`) |
+| `H` | Index / Pager | View HTML email part in web browser |
+| `I` | Index / Pager | Add `.ics` calendar attachment to Google Calendar |
+| `A` | Index / Pager | Add sender to Khard address book |
+| `Y` | Compose | Schedule email delivery (inserts pre-filled `X-Send-At` header) |
+
+---
+
 ## Bootstrapping a New Machine
 
 ### 1. Clone the Bare Repository

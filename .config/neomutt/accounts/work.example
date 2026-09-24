@@ -16,3 +16,13 @@ set trash = "+Trash"
 
 # Send via msmtp
 set sendmail = "/usr/bin/msmtp -a work"
+
+# Fast folder jumps (Work)
+macro index,pager ,a "<change-folder>+Archive<enter>" "Go to Archive"
+macro index,pager ,s "<change-folder>+Sent<enter>" "Go to Sent"
+macro index,pager ,d "<change-folder>+Drafts<enter>" "Go to Drafts"
+
+# Single-key Account Toggle (Pressing X or ,x while in Work switches to Personal)
+macro index,pager X  "<change-folder>~/Mail/personal/INBOX<enter>" "Switch to Personal Account"
+macro index,pager ,x "<change-folder>~/Mail/personal/INBOX<enter>" "Switch to Personal Account"
+

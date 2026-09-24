@@ -16,10 +16,12 @@ folder-hook '~/Mail/personal' 'source ~/.config/neomutt/accounts/personal'
 mailboxes -label "▼ WORK" "~/Mail/work/INBOX"
 mailboxes -nopoll -label "  Sent" "~/Mail/work/Sent"
 mailboxes -nopoll -label "  Drafts" "~/Mail/work/Drafts"
+mailboxes -nopoll -label "  Archive" "~/Mail/work/Archive"
 
 mailboxes -label "▼ PERSONAL" "~/Mail/personal/INBOX"
 mailboxes -nopoll -label "  Sent" "~/Mail/personal/[Gmail]/Sent Mail"
 mailboxes -nopoll -label "  Drafts" "~/Mail/personal/[Gmail]/Drafts"
+mailboxes -nopoll -label "  Archive" "~/Mail/personal/[Gmail]/All Mail"
 
 # 4. Default account on startup
 source ~/.config/neomutt/accounts/work
