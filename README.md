@@ -136,7 +136,7 @@ dot config --local status.showUntrackedFiles no
 sudo pacman -S --needed \
   bash bash-completion git neovim tmux vifm zathura zathura-pdf-mupdf \
   dunst xwallpaper unclutter udiskie xcompmgr fzf pyenv pass gnupg \
-  msmtp isync khal vdirsyncer
+  neomutt msmtp isync khal khard vdirsyncer pamixer bat
 
 # Suckless builds (dwm, st, slstatus):
 # Recompile from your custom build sources (e.g. ~/Templates/{dwm,st,slstatus})
@@ -150,11 +150,11 @@ The modular Bash, Neovim, tmux, vifm, and PIM configurations adhere strictly to 
 ```bash
 # Debian / Ubuntu:
 sudo apt update && sudo apt install -y \
-  bash git neovim tmux vifm zathura dunst fzf pass gnupg msmtp isync
+  bash git neovim tmux vifm zathura dunst fzf pass gnupg neomutt msmtp isync khal khard vdirsyncer
 
 # Fedora:
 sudo dnf install -y \
-  bash git neovim tmux vifm zathura dunst fzf pass gnupg msmtp isync
+  bash git neovim tmux vifm zathura dunst fzf pass gnupg neomutt msmtp isync khal khard vdirsyncer
 ```
 
 #### Option C: macOS (Darwin)
@@ -164,12 +164,13 @@ The modular bash scripts and `~/.bashrc` detect macOS and Homebrew automatically
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 
 # Install CLI toolchain:
-brew install bash git neovim tmux vifm pass gnupg msmtp isync fzf pyenv
+brew install bash bash-completion@2 git neovim tmux vifm pass gnupg neomutt msmtp isync fzf pyenv bat
 
-# Set Homebrew Bash as your default user shell:
-sudo chsh -s /opt/homebrew/bin/bash $USER
+# Set Homebrew Bash as your default user shell (macOS ships with outdated Bash 3.2):
+sudo sh -c 'echo "$(brew --prefix)/bin/bash" >> /etc/shells'
+chsh -s "$(brew --prefix)/bin/bash"
 ```
-*(Note: Linux-only services like `systemd/user`, `dwm`, and `slstatus` are bypassed on macOS, while Neovim, Bash, and tmux function identically).*
+*(Note: Linux-only components such as `systemd/user`, `dwm`, `st`, `slstatus`, `xrandr`, and direct sysfs battery/backlight readers in `status.sh` are bypassed on macOS, while Neovim, Bash, tmux, vifm, and NeoMutt function identically).*
 
 ---
 
