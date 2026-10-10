@@ -9,11 +9,15 @@ import os
 import datetime
 import icalendar
 
+def open_target(target):
+    cmd = 'open' if sys.platform == 'darwin' else 'xdg-open'
+    subprocess.run([cmd, target])
+
 def process_html(payload):
     with tempfile.NamedTemporaryFile(delete=False, suffix='.html', mode='wb') as f:
         f.write(payload)
         temp_path = f.name
-    subprocess.run(['xdg-open', temp_path])
+    open_target(temp_path)
 
 def format_gcal_datetime(dt_obj):
     if dt_obj is None:
@@ -107,7 +111,7 @@ def process_gcal(raw_email):
         params['details'] = description[:2000]
 
     gcal_url = "https://calendar.google.com/calendar/render?" + urllib.parse.urlencode(params)
-    subprocess.run(['xdg-open', gcal_url])
+    open_target(gcal_url)
 
 if __name__ == '__main__':
     if len(sys.argv) < 2:

@@ -222,14 +222,22 @@ chmod 700 ~/.config/msmtp ~/.config/isync ~/.config/neomutt ~/.config/vdirsyncer
 
 ---
 
-### 4. Enable User Daemons (Linux only)
+### 4. Enable Background Mail Sync & Services
 
+#### Linux (Systemd)
 Enable background Exchange gateway and automatic mailbox synchronization timers:
 ```bash
 systemctl --user daemon-reload
 systemctl --user enable --now davmail.service
 systemctl --user enable --now mbsync.timer
 ```
+
+#### macOS (Launchd & `setup-mac-mail`)
+On macOS, run the automated setup helper to install dependencies and configure a native `launchd` user agent syncing every 60 seconds:
+```bash
+setup-mac-mail
+```
+*(This creates and loads `~/Library/LaunchAgents/org.dotfiles.mbsync.plist` executing `~/.config/isync/sync-mail.sh` every 60 seconds).*
 
 ---
 
