@@ -196,19 +196,18 @@ setup-accounts
   - `~/.config/vdirsyncer/config`
 
 #### Method 2: Encrypted Vault Transfer (Zero-Touch)
-If migrating from an existing machine, export your active configurations directly inside an encrypted GPG envelope. Using `-C "$HOME"` creates relative paths inside the archive (avoiding leading-slash stripping issues), and `-h` dereferences any symlinks (e.g., `~/.mbsyncrc` pointing to `~/.config/isync/mbsyncrc`):
+If migrating from an existing machine, export your active configurations directly inside an encrypted GPG envelope. Using `-C "$HOME"` creates relative paths inside the archive (avoiding leading-slash stripping issues):
 
 **On the source machine (Export):**
 ```bash
-tar -chzf - -C "$HOME" \
+tar -czf - -C "$HOME" \
   .config/davmail.properties \
   .config/isync/mbsyncrc \
   .config/msmtp/config \
   .config/vdirsyncer/config \
   .config/neomutt/accounts \
   .config/neomutt/signature_work \
-  .config/passwords \
-  .mbsyncrc | gpg -e -r <YOUR-GPG-KEY> -o ~/dotfiles-secrets.tar.gz.gpg
+  .config/passwords | gpg -e -r <YOUR-GPG-KEY> -o ~/dotfiles-secrets.tar.gz.gpg
 ```
 
 **On the new machine (Import):**
@@ -217,7 +216,7 @@ tar -chzf - -C "$HOME" \
 gpg -d ~/dotfiles-secrets.tar.gz.gpg | tar -xzf - -C "$HOME"
 
 # Enforce least-privilege permissions
-chmod 600 ~/.config/davmail.properties ~/.config/isync/mbsyncrc ~/.config/msmtp/config ~/.config/neomutt/accounts/* ~/.mbsyncrc
+chmod 600 ~/.config/davmail.properties ~/.config/isync/mbsyncrc ~/.config/msmtp/config ~/.config/neomutt/accounts/*
 chmod 700 ~/.config/msmtp ~/.config/isync ~/.config/neomutt ~/.config/vdirsyncer ~/.config/passwords
 ```
 

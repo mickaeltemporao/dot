@@ -10,6 +10,7 @@ alias noise="play -n -q synth 2:0:0 brownnoise synth pinknoise mix synth sine am
 alias ipython="ipython --no-autoindent --ipython-dir=$HOME/.config/ipython --profile=$USER"
 alias en="source .venv/bin/activate"
 alias nm="neomutt"
+alias mbsync='mbsync -c "$HOME/.config/isync/mbsyncrc"'
 if [[ "$OSTYPE" == "darwin"* ]] || command -v brew >/dev/null 2>&1; then
     alias open="open"
 else
