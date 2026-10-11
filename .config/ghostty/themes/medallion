@@ -1,0 +1,29 @@
+# Medallion Dark Theme for Ghostty
+# Inspired by NYC Medallion Taxis (deep asphalt and taxi yellow)
+# Created by Mickael Temporão (https://github.com/mickaeltemporao/medallion.nvim)
+
+background = #101214
+foreground = #e6e8eb
+
+cursor-color = #ffd13b
+cursor-text = #101214
+
+selection-background = #2c313a
+selection-foreground = #e6e8eb
+
+palette = 0=#101214
+palette = 1=#e06c75
+palette = 2=#98c379
+palette = 3=#f5b700
+palette = 4=#61afef
+palette = 5=#c678dd
+palette = 6=#56b6c2
+palette = 7=#e6e8eb
+palette = 8=#484f58
+palette = 9=#e06c75
+palette = 10=#98c379
+palette = 11=#ffd13b
+palette = 12=#61afef
+palette = 13=#c678dd
+palette = 14=#56b6c2
+palette = 15=#ffffff
