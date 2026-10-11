@@ -9,6 +9,21 @@ import os
 import datetime
 import icalendar
 
+def notify(title, msg):
+    if sys.platform == "darwin":
+        escaped_title = title.replace('"', '\\"')
+        escaped_msg = msg.replace('"', '\\"')
+        cmd = f'display notification "{escaped_msg}" with title "{escaped_title}"'
+        try:
+            subprocess.run(["osascript", "-e", cmd], check=False)
+        except Exception:
+            pass
+    else:
+        try:
+            subprocess.run(["notify-send", title, msg], check=False)
+        except Exception:
+            pass
+
 def open_target(target):
     cmd = 'open' if sys.platform == 'darwin' else 'xdg-open'
     subprocess.run([cmd, target])
@@ -56,10 +71,7 @@ def process_gcal(raw_email):
 
     if not ics_content:
         print("[!] No calendar invite (.ics) found in this email.")
-        try:
-            subprocess.run(["notify-send", "NeoMutt Calendar", "No .ics calendar invite found in this email."], check=False)
-        except Exception:
-            pass
+        notify("NeoMutt Calendar", "No .ics calendar invite found in this email.")
         return
 
     try:

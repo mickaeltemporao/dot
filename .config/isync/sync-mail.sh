@@ -9,7 +9,7 @@
 if [ -d "/opt/homebrew/bin" ]; then
     export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:$PATH"
 fi
-export PATH="/usr/local/bin:/usr/bin:/bin:$PATH"
+export PATH="$PATH:/usr/local/bin:/usr/bin:/bin"
 export GPG_TTY=$(tty 2>/dev/null || echo "")
 [ -f ~/.bash_profile ] && source ~/.bash_profile
 [ -f ~/.profile ] && source ~/.profile

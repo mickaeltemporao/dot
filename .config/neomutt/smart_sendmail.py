@@ -21,16 +21,32 @@ def log(msg):
     except Exception:
         pass
 
+def notify(title, msg):
+    if sys.platform == "darwin":
+        escaped_title = title.replace('"', '\\"')
+        escaped_msg = msg.replace('"', '\\"')
+        cmd = f'display notification "{escaped_msg}" with title "{escaped_title}"'
+        try:
+            subprocess.run(["osascript", "-e", cmd], check=False)
+        except Exception:
+            pass
+    else:
+        try:
+            subprocess.run(["notify-send", title, msg], check=False)
+        except Exception:
+            pass
+
 def get_env():
     env = os.environ.copy()
     home_dir = os.path.expanduser("~")
     pass_dir = os.environ.get("PASSWORD_STORE_DIR", os.path.join(home_dir, ".config/passwords"))
     env["HOME"] = home_dir
     env["PASSWORD_STORE_DIR"] = pass_dir
+    brew_bin = "/opt/homebrew/bin"
     if "PATH" not in env:
-        env["PATH"] = "/usr/local/bin:/usr/bin:/bin"
+        env["PATH"] = f"{brew_bin}:/usr/local/bin:/usr/bin:/bin"
     else:
-        env["PATH"] = f"/usr/local/bin:/usr/bin:/bin:{env['PATH']}"
+        env["PATH"] = f"{brew_bin}:/usr/local/bin:/usr/bin:/bin:{env['PATH']}"
     return env
 
 def determine_account(raw_email):
@@ -128,10 +144,7 @@ def flush_queue():
                 os.remove(file_path)
                 success_msg = f"Queued email sent successfully (Account: {account}, File: {filename})"
                 log(success_msg)
-                try:
-                    subprocess.run(["notify-send", "NeoMutt Outbox", success_msg], check=False)
-                except Exception:
-                    pass
+                notify("NeoMutt Outbox", success_msg)
             else:
                 err_text = stderr.decode("utf-8", errors="ignore").strip()
                 log(f"Flush retry failed for {filename} (code {proc.returncode}): {err_text}")
@@ -144,6 +157,10 @@ def flush_queue():
 def main():
     if len(sys.argv) > 1 and sys.argv[1] in ["--flush", "-f", "flush"]:
         flush_queue()
+        sys.exit(0)
+    if len(sys.argv) > 1 and sys.argv[1] in ["--next-morning", "--schedule-default"]:
+        tomorrow = datetime.now() + timedelta(days=1)
+        print(tomorrow.strftime("%Y-%m-%d 08:00"))
         sys.exit(0)
 
     raw_bytes = sys.stdin.buffer.read()
@@ -167,10 +184,7 @@ def main():
         except Exception as e:
             err_msg = f"Error parsing schedule time '{time_str}': {e}"
             log(err_msg)
-            try:
-                subprocess.run(["notify-send", "NeoMutt Schedule ERROR", err_msg], check=False)
-            except Exception:
-                pass
+            notify("NeoMutt Schedule ERROR", err_msg)
             sys.exit(1)
 
         # Save to queue directory
@@ -187,38 +201,36 @@ def main():
         pass_dir = env["PASSWORD_STORE_DIR"]
         env_prefix = f"export HOME='{home_dir}' PASSWORD_STORE_DIR='{pass_dir}'; "
 
-        # Try scheduling with 'at' if available, or 'systemd-run --user'
+        # Try scheduling with 'at' if available, or 'systemd-run --user', or rely on launchd/cron queue flush
         at_path = subprocess.run(["which", "at"], capture_output=True, text=True).stdout.strip()
         if at_path:
-            cmd = f"{env_prefix}msmtp -a {account} -t < '{file_path}' && rm -f '{file_path}'"
-            subprocess.run(f"echo \"{cmd}\" | at \"{calendar_str}\"", shell=True, check=True)
-        else:
+            cmd = f"{env_prefix}msmtp -a {account} -t < '{file_path}' && rm -f '{file_path}'\n"
+            subprocess.run(["at", calendar_str], input=cmd.encode(), check=True)
+        elif subprocess.run(["which", "systemd-run"], capture_output=True, text=True).stdout.strip():
             # systemd-run timer
-            cmd = f"{env_prefix}/usr/bin/msmtp -a {account} -t < '{file_path}' && rm -f '{file_path}'"
+            cmd = f"{env_prefix}msmtp -a {account} -t < '{file_path}' && rm -f '{file_path}'"
             subprocess.run([
                 "systemd-run", "--user",
                 f"--on-calendar={calendar_str}",
                 "/bin/sh", "-c", cmd
             ], check=True)
+        else:
+            log(f"No at/systemd-run available; email queued in {QUEUE_DIR} for background timer delivery.")
 
-        # Schedule RTC hardware wake alarm (1 minute prior to delivery time)
-        wake_dt = target_dt - timedelta(minutes=1)
-        wake_epoch = int(wake_dt.timestamp())
-        try:
-            res = subprocess.run(["sudo", "-n", "rtcwake", "-m", "no", "-t", str(wake_epoch)], capture_output=True, text=True)
-            if res.returncode == 0:
-                log(f"RTC hardware wake alarm set for {wake_dt.strftime('%Y-%m-%d %H:%M:%S')}")
-            else:
-                log(f"RTC wake attempt: rtcwake returned code {res.returncode}")
-        except Exception as e:
-            log(f"RTC wake attempt error: {e}")
+        # Schedule RTC hardware wake alarm (1 minute prior to delivery time) if on Linux
+        if sys.platform.startswith("linux"):
+            wake_dt = target_dt - timedelta(minutes=1)
+            wake_epoch = int(wake_dt.timestamp())
+            try:
+                res = subprocess.run(["sudo", "-n", "rtcwake", "-m", "no", "-t", str(wake_epoch)], capture_output=True, text=True)
+                if res.returncode == 0:
+                    log(f"RTC hardware wake alarm set for {wake_dt.strftime('%Y-%m-%d %H:%M:%S')}")
+            except Exception as e:
+                log(f"RTC wake attempt error: {e}")
 
         success_msg = f"Email scheduled for {calendar_str} (Account: {account})"
         log(success_msg)
-        try:
-            subprocess.run(["notify-send", "NeoMutt Scheduled Send", success_msg], check=False)
-        except Exception:
-            pass
+        notify("NeoMutt Scheduled Send", success_msg)
 
         print(success_msg)
     else:
@@ -255,16 +267,7 @@ def main():
             
             queue_msg = f"Network unavailable or send failed (code {proc.returncode}). Email saved to queue: {job_id}.eml"
             log(queue_msg)
-            
-            try:
-                subprocess.run([
-                    "notify-send",
-                    "-u", "normal",
-                    "NeoMutt: Offline - Email Queued",
-                    "No network connection. Email was saved locally and will send automatically when online."
-                ], check=False)
-            except Exception:
-                pass
+            notify("NeoMutt: Offline - Email Queued", "No network connection. Email was saved locally and will send automatically when online.")
             
             # Return 0 to NeoMutt so the draft is safely handled and not discarded on reboot
             print("No connection. Email saved to offline queue and will be sent automatically.")

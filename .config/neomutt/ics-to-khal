@@ -249,8 +249,8 @@ def main():
 
         sendmail_script = os.path.expanduser("~/.config/neomutt/smart_sendmail.py")
         env = os.environ.copy()
-        env["PASSWORD_STORE_DIR"] = "/home/mt/.config/passwords"
-        env["PATH"] = f"/usr/local/bin:/usr/bin:/bin:{env.get('PATH', '')}"
+        env["PASSWORD_STORE_DIR"] = os.environ.get("PASSWORD_STORE_DIR", os.path.expanduser("~/.config/passwords"))
+        env["PATH"] = f"/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:{env.get('PATH', '')}"
 
         proc = subprocess.Popen(
             [sys.executable, sendmail_script],

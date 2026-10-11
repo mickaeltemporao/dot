@@ -44,7 +44,7 @@ bind pager <down> next-line
 # Compose Menu Shortcuts
 # ----------------------------------------------------
 # Press Shift+Y (Y) in compose menu to prompt with pre-filled YYYY-MM-DD 08:00 date (cross-platform Linux/macOS)
-macro compose Y "<enter-command>my_hdr X-Send-At: `python3 -c \"import datetime; print((datetime.date.today() + datetime.timedelta(days=1)).strftime('%Y-%m-%d 08:00'))\"`" "Prompt for schedule send time (pre-filled with YYYY-MM-DD 08:00)"
+macro compose Y "<enter-command>my_hdr X-Send-At: `~/.config/neomutt/smart_sendmail.py --next-morning`" "Prompt for schedule send time (pre-filled with YYYY-MM-DD 08:00)"
 
 # ----------------------------------------------------
 # Contacts Shortcuts (Khard)

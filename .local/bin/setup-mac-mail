@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # setup-mac-mail: Automated installer & service configuration for NeoMutt on macOS.
-# Configures the mail toolchain, dependencies, directories, and a 60-second background sync agent.
+# Configures the mail toolchain, dependencies, directories, DavMail gateway, and background sync agents.
 
 echo "=========================================================="
 echo "    macOS NeoMutt & Mail Environment Automated Setup"
@@ -19,16 +19,36 @@ if ! command -v brew >/dev/null 2>&1; then
     fi
 fi
 
+BREW_PREFIX="$(brew --prefix)"
+
 # 2. Install required CLI utilities via Homebrew
 echo "[+] Installing mail packages via Homebrew..."
-brew install neomutt isync msmtp khal khard vdirsyncer pass gnupg w3m coreutils
+brew install neomutt isync msmtp khal khard vdirsyncer pass gnupg w3m coreutils pinentry-mac davmail urlscan
 
-# 3. Install Python dependencies for calendar & smart delivery helpers
+# 3. Configure GPG Agent with pinentry-mac for macOS Keychain integration
+echo "[+] Configuring GnuPG Agent with pinentry-mac..."
+mkdir -p "$HOME/.gnupg"
+chmod 700 "$HOME/.gnupg"
+GPG_AGENT_CONF="$HOME/.gnupg/gpg-agent.conf"
+if ! grep -q "pinentry-mac" "$GPG_AGENT_CONF" 2>/dev/null; then
+    cat <<EOF >> "$GPG_AGENT_CONF"
+pinentry-program $BREW_PREFIX/bin/pinentry-mac
+default-cache-ttl 86400
+max-cache-ttl 604800
+EOF
+    gpgconf --kill gpg-agent 2>/dev/null || true
+fi
+
+# Ensure password store symlink exists for tools defaulting to ~/.password-store
+if [ -d "$HOME/.config/passwords" ] && [ ! -L "$HOME/.password-store" ]; then
+    ln -s "$HOME/.config/passwords" "$HOME/.password-store"
+fi
+
+# 4. Install Python dependencies for calendar & smart delivery helpers
 echo "[+] Installing Python dependencies..."
-python3 -m pip install --quiet --upgrade icalendar python-dateutil || true
+python3 -m pip install --quiet --upgrade icalendar python-dateutil mutt-ics || true
 
-# 4. Setup xdg-open shim so attachment openers work natively on macOS
-BREW_PREFIX="$(brew --prefix)"
+# 5. Setup xdg-open shim so attachment openers work natively on macOS
 if [ ! -f "$BREW_PREFIX/bin/xdg-open" ]; then
     echo "[+] Creating xdg-open shim for macOS..."
     cat <<'EOF' > "$BREW_PREFIX/bin/xdg-open"
@@ -38,22 +58,25 @@ EOF
     chmod +x "$BREW_PREFIX/bin/xdg-open"
 fi
 
-# 5. Initialize directories and security permissions
+# 6. Initialize directories and security permissions
 echo "[+] Verifying mail directories and securing permissions..."
-mkdir -p "$HOME/Mail/work" "$HOME/Mail/personal"
+mkdir -p "$HOME/Mail/work"/{INBOX,Sent,Drafts,Trash,Archive}/{cur,new,tmp}
+mkdir -p "$HOME/Mail/personal"/{INBOX,"[Gmail]/Sent Mail","[Gmail]/Drafts","[Gmail]/All Mail","[Gmail]/Bin"}/{cur,new,tmp}
 mkdir -p "$HOME/.cache/neomutt/headers" "$HOME/.cache/neomutt/bodies"
 mkdir -p "$HOME/.mail_queue"
 mkdir -p "$HOME/.config/msmtp" "$HOME/.config/isync" "$HOME/.config/neomutt/accounts" "$HOME/.config/vdirsyncer"
+mkdir -p "$HOME/.local/state/isync" "$HOME/.local/state/davmail"
 
-chmod 700 "$HOME/.config/msmtp" "$HOME/.config/isync" "$HOME/.config/neomutt" "$HOME/.config/vdirsyncer" 2>/dev/null || true
+chmod 700 "$HOME/.config/msmtp" "$HOME/.config/isync" "$HOME/.config/neomutt" "$HOME/.config/neomutt/accounts" "$HOME/.config/vdirsyncer" "$HOME/.mail_queue" "$HOME/.local/state/isync" "$HOME/.local/state/davmail" 2>/dev/null || true
 if [ -d "$HOME/.config/passwords" ]; then
     chmod 700 "$HOME/.config/passwords"
 fi
 
-# Secure config files if present
-for cfg in "$HOME/.config/davmail.properties" "$HOME/.config/isync/mbsyncrc" "$HOME/.config/msmtp/config"; do
+# Secure config files and state logs if present
+for cfg in "$HOME/.config/davmail.properties" "$HOME/.config/isync/mbsyncrc" "$HOME/.config/msmtp/config" "$HOME/.gnupg/gpg-agent.conf"; do
     [ -f "$cfg" ] && chmod 600 "$cfg"
 done
+chmod 600 "$HOME/.local/state/isync"/* "$HOME/.local/state/davmail"/* 2>/dev/null || true
 if [ -d "$HOME/.config/neomutt/accounts" ]; then
     chmod 600 "$HOME/.config/neomutt/accounts"/* 2>/dev/null || true
 fi
@@ -64,15 +87,52 @@ chmod +x "$HOME/.config/isync/sync-mail.sh" \
          "$HOME/.config/neomutt/open_browser.py" \
          "$HOME/.config/neomutt/ics-to-khal" 2>/dev/null || true
 
-# 6. Configure launchd User Agent for 60-second background mail sync
+# 7. Configure launchd User Agent for DavMail Exchange Gateway
 LAUNCH_AGENTS_DIR="$HOME/Library/LaunchAgents"
-PLIST_FILE="$LAUNCH_AGENTS_DIR/org.dotfiles.mbsync.plist"
+DAVMAIL_PLIST="$LAUNCH_AGENTS_DIR/org.dotfiles.davmail.plist"
+mkdir -p "$LAUNCH_AGENTS_DIR"
+
+echo "[+] Generating launchd service for DavMail gateway..."
+cat <<EOF > "$DAVMAIL_PLIST"
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>org.dotfiles.davmail</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>$BREW_PREFIX/bin/davmail</string>
+        <string>$HOME/.config/davmail.properties</string>
+    </array>
+    <key>KeepAlive</key>
+    <true/>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>$HOME/.local/state/davmail/davmail.log</string>
+    <key>StandardErrorPath</key>
+    <string>$HOME/.local/state/davmail/davmail.err</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>$BREW_PREFIX/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <key>JAVA_OPTS</key>
+        <string>-Djava.net.preferIPv4Stack=true</string>
+    </dict>
+</dict>
+</plist>
+EOF
+
+launchctl bootout "gui/$(id -u)/org.dotfiles.davmail" 2>/dev/null || true
+launchctl bootstrap "gui/$(id -u)" "$DAVMAIL_PLIST"
+
+# 8. Configure launchd User Agent for 60-second background mail sync
+MBSYNC_PLIST="$LAUNCH_AGENTS_DIR/org.dotfiles.mbsync.plist"
 LOG_DIR="$HOME/.local/state/isync"
 
-mkdir -p "$LAUNCH_AGENTS_DIR" "$LOG_DIR"
-
 echo "[+] Generating launchd service for 60-second mail sync..."
-cat <<EOF > "$PLIST_FILE"
+cat <<EOF > "$MBSYNC_PLIST"
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -98,20 +158,23 @@ cat <<EOF > "$PLIST_FILE"
         <string>$BREW_PREFIX/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
         <key>HOME</key>
         <string>$HOME</string>
+        <key>PASSWORD_STORE_DIR</key>
+        <string>$HOME/.config/passwords</string>
     </dict>
 </dict>
 </plist>
 EOF
 
-# Load and start the launchd job
+# Load and start the launchd sync job
 echo "[+] Activating background sync agent..."
 launchctl bootout "gui/$(id -u)/org.dotfiles.mbsync" 2>/dev/null || true
-launchctl bootstrap "gui/$(id -u)" "$PLIST_FILE"
+launchctl bootstrap "gui/$(id -u)" "$MBSYNC_PLIST"
 
 echo ""
 echo "=========================================================="
-echo "[✓] macOS NeoMutt installation & 60-second sync activated!"
-echo "    - Launchd service: $PLIST_FILE"
-echo "    - Sync logs: $LOG_DIR/mbsync-sync.log"
+echo "[✓] macOS NeoMutt installation & services activated!"
+echo "    - DavMail service : $DAVMAIL_PLIST (localhost:1143)"
+echo "    - Mail sync service: $MBSYNC_PLIST (every 60s)"
+echo "    - Sync logs       : $LOG_DIR/mbsync-sync.log"
 echo "    - Run 'neomutt' or 'nm' to launch your mail client."
 echo "=========================================================="

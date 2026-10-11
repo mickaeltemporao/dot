@@ -35,6 +35,7 @@ Host imap.example.com
 Port 993
 User personal.email@example.com
 PassCmd "pass email/personal"
+AuthMechs LOGIN
 SSLType IMAPS
 
 IMAPStore personal-remote

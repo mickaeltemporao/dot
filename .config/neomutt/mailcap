@@ -1,4 +1,5 @@
-# HTML (Interactive: opens in Firefox/Chrome when you press 'm' in attachment view)
+# HTML (Interactive: opens in browser)
+text/html; open %s; test=test "$(uname)" = "Darwin"; nametemplate=%s.html
 text/html; xdg-open %s; test=test -n "$DISPLAY"; nametemplate=%s.html
 # HTML (Inline: renders in NeoMutt pager automatically)
 text/html; w3m -I %{charset} -T text/html -dump %s; copiousoutput
@@ -7,15 +8,23 @@ text/html; w3m -I %{charset} -T text/html -dump %s; copiousoutput
 text/calendar; mutt-ics %s; copiousoutput
 
 # PDF
+application/pdf; open %s; test=test "$(uname)" = "Darwin"
 application/pdf; zathura %s
 
 # Images
+image/*; open %s; test=test "$(uname)" = "Darwin"
 image/*; sxiv %s
 
 # MS Office (Word, Excel, PowerPoint)
+application/msword; open %s; test=test "$(uname)" = "Darwin"
 application/msword; libreoffice %s
+application/vnd.openxmlformats-officedocument.wordprocessingml.document; open %s; test=test "$(uname)" = "Darwin"
 application/vnd.openxmlformats-officedocument.wordprocessingml.document; libreoffice %s
+application/vnd.ms-excel; open %s; test=test "$(uname)" = "Darwin"
 application/vnd.ms-excel; libreoffice %s
+application/vnd.openxmlformats-officedocument.spreadsheetml.sheet; open %s; test=test "$(uname)" = "Darwin"
 application/vnd.openxmlformats-officedocument.spreadsheetml.sheet; libreoffice %s
+application/vnd.ms-powerpoint; open %s; test=test "$(uname)" = "Darwin"
 application/vnd.ms-powerpoint; libreoffice %s
+application/vnd.openxmlformats-officedocument.presentationml.presentation; open %s; test=test "$(uname)" = "Darwin"
 application/vnd.openxmlformats-officedocument.presentationml.presentation; libreoffice %s
