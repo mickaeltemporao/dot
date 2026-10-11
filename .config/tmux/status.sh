@@ -84,10 +84,20 @@ net="down"
 if [ "$(uname)" = "Darwin" ]; then
     def_iface=$(route -n get default 2>/dev/null | awk '/interface:/ {print $2}')
     if [ -n "$def_iface" ]; then
-        raw_ssid=$(ipconfig getsummary "$def_iface" 2>/dev/null | awk -F' : ' '/[ \t]SSID : / {print $2; exit}')
-        if [ -n "$raw_ssid" ]; then
+        summary=$(ipconfig getsummary "$def_iface" 2>/dev/null)
+        if echo "$summary" | grep -qi "InterfaceType : WiFi"; then
             net_icon=""
-            net="${raw_ssid:0:3}"
+            raw_ssid=$(networksetup -getairportnetwork "$def_iface" 2>/dev/null | awk -F': ' '/Current Wi-Fi Network:/ {print $2}')
+            [ -z "$raw_ssid" ] && raw_ssid=$(echo "$summary" | awk -F' : ' '/[ \t]SSID : / {print $2; exit}')
+            case "$raw_ssid" in
+                ""|"<"*)
+                    short_ssid="wif"
+                    ;;
+                *)
+                    short_ssid="${raw_ssid:0:3}"
+                    ;;
+            esac
+            net="$short_ssid"
         else
             net_icon=""
             net="eth"
