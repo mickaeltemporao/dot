@@ -88,7 +88,12 @@ if [ "$(uname)" = "Darwin" ]; then
         if echo "$summary" | grep -qi "InterfaceType : WiFi"; then
             net_icon=""
             raw_ssid=$(networksetup -getairportnetwork "$def_iface" 2>/dev/null | awk -F': ' '/Current Wi-Fi Network:/ {print $2}')
-            [ -z "$raw_ssid" ] && raw_ssid=$(echo "$summary" | awk -F' : ' '/[ \t]SSID : / {print $2; exit}')
+            if [ -z "$raw_ssid" ] || [ "$raw_ssid" = "<redacted>" ] || [ "${raw_ssid#<}" != "$raw_ssid" ]; then
+                raw_ssid=$(strings ~/Library/Preferences/com.apple.networkserviceproxy.plist 2>/dev/null | awk '/PrivacyProxyNetworkName/{getline; getline; sub(/^X/,""); print; exit}')
+            fi
+            if [ -z "$raw_ssid" ]; then
+                raw_ssid=$(networksetup -listpreferredwirelessnetworks "$def_iface" 2>/dev/null | sed -n '2s/^[[:space:]]*//p')
+            fi
             case "$raw_ssid" in
                 ""|"<"*)
                     short_ssid="wif"
