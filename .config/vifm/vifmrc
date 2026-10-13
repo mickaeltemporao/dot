@@ -312,10 +312,13 @@ filetype {*.7z},<application/x-7z-compressed>
 fileviewer {*.7z},<application/x-7z-compressed> 7z l %c
 
 " Office files
-filextype {*.odt,*.doc,*.docx,*.xls,*.xlsx,*.odp,*.pptx,*.ppt},
+filextype {*.odt,*.doc,*.docx,*.xls,*.xlsx,*.rtf,*.ods,*.odp,*.pptx,*.ppt,*.csv},
          \<application/vnd.openxmlformats-officedocument.*,
           \application/msword,
-          \application/vnd.ms-excel>
+          \application/vnd.ms-excel,
+          \application/vnd.oasis.opendocument.*,
+          \application/rtf,
+          \text/rtf>
         \ libreoffice %f &
 fileviewer {*.doc},<application/msword> catdoc %c
 fileviewer {*.docx},
