@@ -29,3 +29,8 @@ mouse-hide-while-typing = true
 
 # Keep accents working
 macos-option-as-alt = left
+
+# Disable notifications
+desktop-notifications = false
+app-notifications = false
+notify-on-command-finish = never
