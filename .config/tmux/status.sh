@@ -125,10 +125,20 @@ else
     fi
 fi
 
+# 5. Unread Mail Count (to the left of the date)
+mail_new=$(find "$HOME/Mail/work/INBOX/new" "$HOME/Mail/personal/INBOX/new" -type f 2>/dev/null | wc -l | tr -d ' ')
+mail_new="${mail_new:-0}"
+if [ "$mail_new" -gt 0 ]; then
+    mail_str="#[fg=#f5b700]  ${mail_new}"
+else
+    mail_str="#[fg=#6e7681]  0"
+fi
+
 # Output with greyed-out minimalist colors
 # Values: #6e7681 (muted gray), Separators: #484f58 (dark slate)
-printf "#[fg=#6e7681]%s %s #[fg=#484f58]| #[fg=#6e7681]%s %s #[fg=#484f58]| #[fg=#6e7681]%s %s #[fg=#484f58]| #[fg=#6e7681]%s  %s " \
+printf "#[fg=#6e7681]%s %s #[fg=#484f58]| #[fg=#6e7681]%s %s #[fg=#484f58]| #[fg=#6e7681]%s %s #[fg=#484f58]| #[fg=#6e7681]%s  %s #[fg=#484f58]| %s " \
     "" "$disk" \
     "$bat_icon" "${bat_cap}%" \
     "$vol_icon" "$vol" \
-    "$net_icon" "$net"
+    "$net_icon" "$net" \
+    "$mail_str"

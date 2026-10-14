@@ -22,6 +22,13 @@ def log(msg):
         pass
 
 def notify(title, msg):
+    # 1. In-tmux status bar toast (instant feedback across Linux & macOS)
+    try:
+        subprocess.run(["tmux", "display-message", "-d", "3500", f"{title}: {msg}"], capture_output=True, check=False)
+    except Exception:
+        pass
+
+    # 2. macOS native Notification Center
     if sys.platform == "darwin":
         escaped_title = title.replace('"', '\\"')
         escaped_msg = msg.replace('"', '\\"')
@@ -30,6 +37,7 @@ def notify(title, msg):
             subprocess.run(["osascript", "-e", cmd], check=False)
         except Exception:
             pass
+    # 3. Linux desktop notification (Dunst)
     else:
         try:
             subprocess.run(["notify-send", title, msg], check=False)

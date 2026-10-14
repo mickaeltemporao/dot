@@ -84,14 +84,24 @@ python3 ~/.config/neomutt/smart_sendmail.py --flush >/dev/null 2>&1 &
 
 echo "[$(date)] Mail sync complete!"
 
-# Send cross-platform desktop notification (Linux notify-send / macOS osascript)
+# Send cross-platform desktop & in-tmux notifications
 notify_user() {
     local title="$1"
     local message="$2"
     local urgency="${3:-normal}"
+
+    # 1. In-tmux status bar toast (instant feedback across Linux & macOS)
+    if [ -n "$TMUX" ] || tmux info >/dev/null 2>&1; then
+        tmux display-message -d 3500 "${title}: ${message}" 2>/dev/null || true
+    fi
+
+    # 2. Linux desktop notification (Dunst)
     if command -v notify-send >/dev/null 2>&1; then
         notify-send -u "$urgency" -i mail-unread "$title" "$message"
-    elif [ "$(uname)" = "Darwin" ]; then
+    fi
+
+    # 3. macOS native Notification Center
+    if [ "$(uname)" = "Darwin" ]; then
         osascript -e "display notification \"$message\" with title \"$title\"" 2>/dev/null || true
     fi
 }
