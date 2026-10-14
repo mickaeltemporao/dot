@@ -10,8 +10,12 @@ import datetime
 import icalendar
 
 def notify(title, msg):
+    # In-tmux status bar notification (center display, cross-platform Linux & macOS)
     try:
-        subprocess.run(["tmux", "display-message", "-d", "3500", f"{title}: {msg}"], capture_output=True, check=False)
+        text = f"{title}: {msg}"
+        subprocess.run(["tmux", "set", "-g", "@notification", text], capture_output=True, check=False)
+        subprocess.run(["tmux", "refresh-client", "-S"], capture_output=True, check=False)
+        subprocess.run(["tmux", "run-shell", "-b", "sleep 5 && tmux set -gu @notification && tmux refresh-client -S"], capture_output=True, check=False)
     except Exception:
         pass
 

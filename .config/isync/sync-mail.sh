@@ -33,6 +33,17 @@ if [ -f "$HOME/.config/neomutt/smart_sendmail.py" ]; then
     python3 "$HOME/.config/neomutt/smart_sendmail.py" --flush
 fi
 
+# In-tmux status bar notification (center display)
+notify_user() {
+    local title="$1"
+    local message="$2"
+    if [ -n "$TMUX" ] || tmux info >/dev/null 2>&1; then
+        tmux set -g @notification "${title}: ${message}" 2>/dev/null || true
+        tmux refresh-client -S 2>/dev/null || true
+        tmux run-shell -b 'sleep 5 && tmux set -gu @notification && tmux refresh-client -S' 2>/dev/null || true
+    fi
+}
+
 # Ensure single-instance execution for IMAP sync (cross-platform atomic lock)
 LOCK_DIR="${XDG_RUNTIME_DIR:-/tmp}/sync-mail.lockdir"
 if ! mkdir "$LOCK_DIR" 2>/dev/null; then
@@ -41,7 +52,7 @@ if ! mkdir "$LOCK_DIR" 2>/dev/null; then
         OLD_PID=$(cat "$LOCK_DIR/pid" 2>/dev/null || echo "")
         if [ -n "$OLD_PID" ] && kill -0 "$OLD_PID" 2>/dev/null; then
             if [ "$MANUAL_NOTIFY" = true ]; then
-                tmux display-message -d 3000 "NeoMutt: Mail sync is already in progress..." 2>/dev/null || true
+                notify_user "NeoMutt" "Mail sync is already in progress..."
             fi
             exit 0
         fi
@@ -92,14 +103,6 @@ fi
 
 echo "[$(date)] Mail sync complete!"
 
-# In-tmux status bar notification
-notify_user() {
-    local title="$1"
-    local message="$2"
-    if [ -n "$TMUX" ] || tmux info >/dev/null 2>&1; then
-        tmux display-message -d 3500 "${title}: ${message}" 2>/dev/null || true
-    fi
-}
 
 NEW_COUNT=$(find "$HOME/Mail/work/INBOX/new" "$HOME/Mail/personal/INBOX/new" -type f 2>/dev/null | wc -l | tr -d ' ')
 NEW_COUNT="${NEW_COUNT:-0}"
