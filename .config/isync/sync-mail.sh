@@ -27,7 +27,13 @@ for arg in "$@"; do
     fi
 done
 
-# Ensure single-instance execution (cross-platform atomic lock)
+# 1. Flush any pending scheduled or offline outbound emails immediately!
+# This runs on every 60s tick and is never blocked by lengthy IMAP synchronizations.
+if [ -f "$HOME/.config/neomutt/smart_sendmail.py" ]; then
+    python3 "$HOME/.config/neomutt/smart_sendmail.py" --flush
+fi
+
+# Ensure single-instance execution for IMAP sync (cross-platform atomic lock)
 LOCK_DIR="${XDG_RUNTIME_DIR:-/tmp}/sync-mail.lockdir"
 if ! mkdir "$LOCK_DIR" 2>/dev/null; then
     # Check if prior process is still alive
@@ -79,8 +85,10 @@ if command -v vdirsyncer >/dev/null 2>&1; then
     run_timeout vdirsyncer sync contacts >/dev/null 2>&1 &
 fi
 
-# Flush any pending offline/queued outbound emails
-python3 ~/.config/neomutt/smart_sendmail.py --flush >/dev/null 2>&1 &
+# Flush any outbound emails queued during IMAP synchronization
+if [ -f "$HOME/.config/neomutt/smart_sendmail.py" ]; then
+    python3 "$HOME/.config/neomutt/smart_sendmail.py" --flush
+fi
 
 echo "[$(date)] Mail sync complete!"
 
