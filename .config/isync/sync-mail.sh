@@ -34,8 +34,8 @@ if ! mkdir "$LOCK_DIR" 2>/dev/null; then
     if [ -f "$LOCK_DIR/pid" ]; then
         OLD_PID=$(cat "$LOCK_DIR/pid" 2>/dev/null || echo "")
         if [ -n "$OLD_PID" ] && kill -0 "$OLD_PID" 2>/dev/null; then
-            if [ "$MANUAL_NOTIFY" = true ] && command -v notify-send >/dev/null 2>&1; then
-                notify-send -u low -i mail-unread "NeoMutt" "Mail sync is already in progress..."
+            if [ "$MANUAL_NOTIFY" = true ]; then
+                tmux display-message -d 3000 "NeoMutt: Mail sync is already in progress..." 2>/dev/null || true
             fi
             exit 0
         fi
@@ -84,35 +84,23 @@ python3 ~/.config/neomutt/smart_sendmail.py --flush >/dev/null 2>&1 &
 
 echo "[$(date)] Mail sync complete!"
 
-# Send cross-platform desktop & in-tmux notifications
+# In-tmux status bar notification
 notify_user() {
     local title="$1"
     local message="$2"
-    local urgency="${3:-normal}"
-
-    # 1. In-tmux status bar toast (instant feedback across Linux & macOS)
     if [ -n "$TMUX" ] || tmux info >/dev/null 2>&1; then
         tmux display-message -d 3500 "${title}: ${message}" 2>/dev/null || true
     fi
-
-    # 2. Linux desktop notification (Dunst)
-    if command -v notify-send >/dev/null 2>&1; then
-        notify-send -u "$urgency" -i mail-unread "$title" "$message"
-    fi
-
-    # 3. macOS native Notification Center
-    if [ "$(uname)" = "Darwin" ]; then
-        osascript -e "display notification \"$message\" with title \"$title\"" 2>/dev/null || true
-    fi
 }
 
-NEW_COUNT=$(find "$HOME/Mail/work/INBOX/new" "$HOME/Mail/personal/INBOX/new" -type f 2>/dev/null | wc -l)
+NEW_COUNT=$(find "$HOME/Mail/work/INBOX/new" "$HOME/Mail/personal/INBOX/new" -type f 2>/dev/null | wc -l | tr -d ' ')
+NEW_COUNT="${NEW_COUNT:-0}"
 if [ "$MANUAL_NOTIFY" = true ]; then
     if [ "$NEW_COUNT" -gt 0 ]; then
-        notify_user "NeoMutt" "Sync complete: $NEW_COUNT new email(s)" "normal"
+        notify_user "NeoMutt" "Sync complete: $NEW_COUNT new email(s)"
     else
-        notify_user "NeoMutt" "Sync complete: No new email" "low"
+        notify_user "NeoMutt" "Sync complete: No new email"
     fi
 elif [ "$NEW_COUNT" -gt 0 ]; then
-    notify_user "NeoMutt" "$NEW_COUNT new email(s) received" "normal"
+    notify_user "NeoMutt" "$NEW_COUNT new email(s) received"
 fi
