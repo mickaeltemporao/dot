@@ -55,5 +55,6 @@ macro index,pager A "<pipe-message>khard add-email<enter>" "Add contact to addre
 # ----------------------------------------------------
 # Sync Shortcuts (mbsync)
 # ----------------------------------------------------
-# Press 'G' (Shift+G) in index or pager to force sync all mailboxes and refresh NeoMutt
-macro index,pager G "<shell-escape>~/.config/isync/sync-mail.sh<enter><check-stats><refresh>" "Sync all mailboxes"
+# Press 'G' (Shift+G) in index or pager to sync all mailboxes in the background with desktop notification
+macro index,pager G "<shell-escape>(~/.config/isync/sync-mail.sh --notify >/dev/null 2>&1 &)<enter><enter-command>echo 'Syncing mailboxes in background...'<enter>" "Sync all mailboxes in background"
+

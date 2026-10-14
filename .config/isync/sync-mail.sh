@@ -19,6 +19,24 @@ export PASSWORD_STORE_DIR="${PASSWORD_STORE_DIR:-$HOME/.config/passwords}"
 
 CONFIG_FILE="$HOME/.config/isync/mbsyncrc"
 
+# Check arguments
+MANUAL_NOTIFY=false
+for arg in "$@"; do
+    if [ "$arg" = "--notify" ] || [ "$arg" = "-n" ]; then
+        MANUAL_NOTIFY=true
+    fi
+done
+
+# Ensure single-instance execution via flock to prevent channel lock errors
+LOCK_FILE="${XDG_RUNTIME_DIR:-/tmp}/sync-mail.lock"
+exec 200>"$LOCK_FILE"
+if ! flock -n 200; then
+    if [ "$MANUAL_NOTIFY" = true ] && command -v notify-send >/dev/null 2>&1; then
+        notify-send -u low -i mail-unread "NeoMutt" "Mail sync is already in progress..."
+    fi
+    exit 0
+fi
+
 # Portable timeout wrapper (GNU timeout, gtimeout on macOS, or direct execution)
 run_timeout() {
     if command -v timeout >/dev/null 2>&1; then
@@ -49,3 +67,16 @@ python3 ~/.config/neomutt/smart_sendmail.py --flush >/dev/null 2>&1 &
 
 echo "[$(date)] Mail sync complete!"
 
+# Send desktop notification via dunst / notify-send if appropriate
+if command -v notify-send >/dev/null 2>&1; then
+    NEW_COUNT=$(find "$HOME/Mail/work/INBOX/new" "$HOME/Mail/personal/INBOX/new" -type f 2>/dev/null | wc -l)
+    if [ "$MANUAL_NOTIFY" = true ]; then
+        if [ "$NEW_COUNT" -gt 0 ]; then
+            notify-send -u normal -i mail-unread "NeoMutt" "Sync complete: $NEW_COUNT new email(s)"
+        else
+            notify-send -u low -i mail-read "NeoMutt" "Sync complete: No new email"
+        fi
+    elif [ "$NEW_COUNT" -gt 0 ]; then
+        notify-send -u normal -i mail-unread "NeoMutt" "$NEW_COUNT new email(s) received"
+    fi
+fi
