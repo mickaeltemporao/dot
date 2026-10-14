@@ -1,6 +1,14 @@
 # Core System and Workflow Aliases
-alias dot="/usr/bin/git --git-dir=$HOME/.dot/ --work-tree=$HOME"
-alias ls="ls -lah --color=auto"
+alias dot="git --git-dir=$HOME/.dot/ --work-tree=$HOME"
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    if command -v gls >/dev/null 2>&1; then
+        alias ls="gls -lah --color=auto"
+    else
+        alias ls="ls -lahG"
+    fi
+else
+    alias ls="ls -lah --color=auto"
+fi
 alias grep="grep --color=auto"
 alias vi="nvim"
 alias vim="nvim"

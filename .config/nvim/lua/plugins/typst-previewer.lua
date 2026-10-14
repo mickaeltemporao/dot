@@ -10,7 +10,7 @@ return {
 
       -- Custom format string to open the output link provided with %s
       -- Example: open_cmd = 'firefox %s -P typst-preview --class typst-preview'
-      open_cmd = 'firefox --new-tab %s',
+      open_cmd = vim.fn.has('mac') == 1 and 'open %s' or 'firefox --new-tab %s',
       -- open_cmd = 'brave --app=%s',
       -- open_cmd = 'open -a safari %s',
       -- open_cmd = 'qutebrowser %s',

@@ -8,7 +8,7 @@ title="${*:-}"
 
 # If no title passed from CLI and running in X11, prompt interactively
 if [ -z "$title" ] && [ -n "${DISPLAY:-}" ]; then
-    choices=$(printf "[Daily Scratchpad]\n[General Scratchpad]\n"; find "$NOTES_DIR" -maxdepth 1 -name "*.md" -printf "%f\n" 2>/dev/null | sort -r | head -n 20)
+    choices=$(printf "[Daily Scratchpad]\n[General Scratchpad]\n"; find "$NOTES_DIR" -maxdepth 1 -name "*.md" 2>/dev/null | sed 's|.*/||' | sort -r | head -n 20)
     title=$(echo "$choices" | fzfmenu --prompt="Note title or select: " || true)
 fi
 
