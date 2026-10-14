@@ -197,44 +197,10 @@ def main():
         os.chmod(file_path, 0o600)
 
         calendar_str = target_dt.strftime("%Y-%m-%d %H:%M:%S")
-        home_dir = env["HOME"]
-        pass_dir = env["PASSWORD_STORE_DIR"]
-        env_prefix = f"export HOME='{home_dir}' PASSWORD_STORE_DIR='{pass_dir}'; "
-
-        # Try scheduling with system timers on Linux; on macOS rely on recurring launchd queue flush (every 60s)
-        if sys.platform.startswith("linux"):
-            try:
-                systemd_run = subprocess.run(["which", "systemd-run"], capture_output=True, text=True).stdout.strip()
-                if systemd_run:
-                    cmd = f"{env_prefix}msmtp -a {account} -t < '{file_path}' && rm -f '{file_path}'"
-                    subprocess.run([
-                        "systemd-run", "--user",
-                        f"--on-calendar={calendar_str}",
-                        "/bin/sh", "-c", cmd
-                    ], check=True)
-                elif subprocess.run(["which", "at"], capture_output=True, text=True).stdout.strip():
-                    cmd = f"{env_prefix}msmtp -a {account} -t < '{file_path}' && rm -f '{file_path}'\n"
-                    subprocess.run(["at", calendar_str], input=cmd.encode(), check=True)
-            except Exception as e:
-                log(f"System timer notice: {e}; relying on background queue flush.")
-        else:
-            log(f"Email queued in {QUEUE_DIR} for background launchd delivery at {calendar_str}.")
-
-        # Schedule RTC hardware wake alarm (1 minute prior to delivery time) if on Linux
-        if sys.platform.startswith("linux"):
-            wake_dt = target_dt - timedelta(minutes=1)
-            wake_epoch = int(wake_dt.timestamp())
-            try:
-                res = subprocess.run(["sudo", "-n", "rtcwake", "-m", "no", "-t", str(wake_epoch)], capture_output=True, text=True)
-                if res.returncode == 0:
-                    log(f"RTC hardware wake alarm set for {wake_dt.strftime('%Y-%m-%d %H:%M:%S')}")
-            except Exception as e:
-                log(f"RTC wake attempt error: {e}")
-
+        log(f"Email queued in {QUEUE_DIR} for delivery at {calendar_str}.")
         success_msg = f"Email scheduled for {calendar_str} (Account: {account})"
         log(success_msg)
         notify("NeoMutt Scheduled Send", success_msg)
-
         print(success_msg)
     else:
         # Immediate send

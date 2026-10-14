@@ -5,7 +5,7 @@ After=network.target network-online.target
 [Service]
 Type=oneshot
 # This calls the robust, parallel retry script we just made!
-ExecStart=/home/mt/.config/isync/sync-mail.sh
+ExecStart=%h/.config/isync/sync-mail.sh
 
 # CRITICAL for 'pass' (GPG). If your GPG key is locked, these variables
 # allow the gpg-agent to securely pop up a graphical password prompt (pinentry)

@@ -84,16 +84,25 @@ python3 ~/.config/neomutt/smart_sendmail.py --flush >/dev/null 2>&1 &
 
 echo "[$(date)] Mail sync complete!"
 
-# Send desktop notification via dunst / notify-send if appropriate
-if command -v notify-send >/dev/null 2>&1; then
-    NEW_COUNT=$(find "$HOME/Mail/work/INBOX/new" "$HOME/Mail/personal/INBOX/new" -type f 2>/dev/null | wc -l)
-    if [ "$MANUAL_NOTIFY" = true ]; then
-        if [ "$NEW_COUNT" -gt 0 ]; then
-            notify-send -u normal -i mail-unread "NeoMutt" "Sync complete: $NEW_COUNT new email(s)"
-        else
-            notify-send -u low -i mail-read "NeoMutt" "Sync complete: No new email"
-        fi
-    elif [ "$NEW_COUNT" -gt 0 ]; then
-        notify-send -u normal -i mail-unread "NeoMutt" "$NEW_COUNT new email(s) received"
+# Send cross-platform desktop notification (Linux notify-send / macOS osascript)
+notify_user() {
+    local title="$1"
+    local message="$2"
+    local urgency="${3:-normal}"
+    if command -v notify-send >/dev/null 2>&1; then
+        notify-send -u "$urgency" -i mail-unread "$title" "$message"
+    elif [ "$(uname)" = "Darwin" ]; then
+        osascript -e "display notification \"$message\" with title \"$title\"" 2>/dev/null || true
     fi
+}
+
+NEW_COUNT=$(find "$HOME/Mail/work/INBOX/new" "$HOME/Mail/personal/INBOX/new" -type f 2>/dev/null | wc -l)
+if [ "$MANUAL_NOTIFY" = true ]; then
+    if [ "$NEW_COUNT" -gt 0 ]; then
+        notify_user "NeoMutt" "Sync complete: $NEW_COUNT new email(s)" "normal"
+    else
+        notify_user "NeoMutt" "Sync complete: No new email" "low"
+    fi
+elif [ "$NEW_COUNT" -gt 0 ]; then
+    notify_user "NeoMutt" "$NEW_COUNT new email(s) received" "normal"
 fi
