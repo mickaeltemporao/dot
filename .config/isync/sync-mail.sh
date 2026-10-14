@@ -27,15 +27,27 @@ for arg in "$@"; do
     fi
 done
 
-# Ensure single-instance execution via flock to prevent channel lock errors
-LOCK_FILE="${XDG_RUNTIME_DIR:-/tmp}/sync-mail.lock"
-exec 200>"$LOCK_FILE"
-if ! flock -n 200; then
-    if [ "$MANUAL_NOTIFY" = true ] && command -v notify-send >/dev/null 2>&1; then
-        notify-send -u low -i mail-unread "NeoMutt" "Mail sync is already in progress..."
+# Ensure single-instance execution (cross-platform atomic lock)
+LOCK_DIR="${XDG_RUNTIME_DIR:-/tmp}/sync-mail.lockdir"
+if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+    # Check if prior process is still alive
+    if [ -f "$LOCK_DIR/pid" ]; then
+        OLD_PID=$(cat "$LOCK_DIR/pid" 2>/dev/null || echo "")
+        if [ -n "$OLD_PID" ] && kill -0 "$OLD_PID" 2>/dev/null; then
+            if [ "$MANUAL_NOTIFY" = true ] && command -v notify-send >/dev/null 2>&1; then
+                notify-send -u low -i mail-unread "NeoMutt" "Mail sync is already in progress..."
+            fi
+            exit 0
+        fi
     fi
-    exit 0
+    # Clear stale lock
+    rm -rf "$LOCK_DIR"
+    if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+        exit 0
+    fi
 fi
+echo $$ > "$LOCK_DIR/pid"
+trap 'rm -rf "$LOCK_DIR"' EXIT INT TERM
 
 # Portable timeout wrapper (GNU timeout, gtimeout on macOS, or direct execution)
 run_timeout() {
@@ -61,6 +73,11 @@ PID_PERSONAL=$!
 # Wait for both background jobs to finish
 wait $PID_WORK
 wait $PID_PERSONAL
+
+# Sync Contacts (CardDAV via DavMail to local VCF)
+if command -v vdirsyncer >/dev/null 2>&1; then
+    run_timeout vdirsyncer sync contacts >/dev/null 2>&1 &
+fi
 
 # Flush any pending offline/queued outbound emails
 python3 ~/.config/neomutt/smart_sendmail.py --flush >/dev/null 2>&1 &

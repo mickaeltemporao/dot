@@ -13,6 +13,7 @@ set sort_aux = reverse-last-date-received
 set date_format="%y/%m/%d %I:%M%p"
 set index_format="%4C %Z %[%b %d %H:%M] %-15.15L (%?l?%4l&%4c?) %s"
 set help = no               # Hide the top keybinding help bar (q:Quit d:Del etc.)
+set hostname = "localhost"  # Bypass macOS Bonjour/mDNS resolution timeout on startup
 
 # ====================================================
 # Core Maildir Behavior
