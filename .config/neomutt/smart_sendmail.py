@@ -201,21 +201,24 @@ def main():
         pass_dir = env["PASSWORD_STORE_DIR"]
         env_prefix = f"export HOME='{home_dir}' PASSWORD_STORE_DIR='{pass_dir}'; "
 
-        # Try scheduling with 'at' if available, or 'systemd-run --user', or rely on launchd/cron queue flush
-        at_path = subprocess.run(["which", "at"], capture_output=True, text=True).stdout.strip()
-        if at_path:
-            cmd = f"{env_prefix}msmtp -a {account} -t < '{file_path}' && rm -f '{file_path}'\n"
-            subprocess.run(["at", calendar_str], input=cmd.encode(), check=True)
-        elif subprocess.run(["which", "systemd-run"], capture_output=True, text=True).stdout.strip():
-            # systemd-run timer
-            cmd = f"{env_prefix}msmtp -a {account} -t < '{file_path}' && rm -f '{file_path}'"
-            subprocess.run([
-                "systemd-run", "--user",
-                f"--on-calendar={calendar_str}",
-                "/bin/sh", "-c", cmd
-            ], check=True)
+        # Try scheduling with system timers on Linux; on macOS rely on recurring launchd queue flush (every 60s)
+        if sys.platform.startswith("linux"):
+            try:
+                systemd_run = subprocess.run(["which", "systemd-run"], capture_output=True, text=True).stdout.strip()
+                if systemd_run:
+                    cmd = f"{env_prefix}msmtp -a {account} -t < '{file_path}' && rm -f '{file_path}'"
+                    subprocess.run([
+                        "systemd-run", "--user",
+                        f"--on-calendar={calendar_str}",
+                        "/bin/sh", "-c", cmd
+                    ], check=True)
+                elif subprocess.run(["which", "at"], capture_output=True, text=True).stdout.strip():
+                    cmd = f"{env_prefix}msmtp -a {account} -t < '{file_path}' && rm -f '{file_path}'\n"
+                    subprocess.run(["at", calendar_str], input=cmd.encode(), check=True)
+            except Exception as e:
+                log(f"System timer notice: {e}; relying on background queue flush.")
         else:
-            log(f"No at/systemd-run available; email queued in {QUEUE_DIR} for background timer delivery.")
+            log(f"Email queued in {QUEUE_DIR} for background launchd delivery at {calendar_str}.")
 
         # Schedule RTC hardware wake alarm (1 minute prior to delivery time) if on Linux
         if sys.platform.startswith("linux"):
