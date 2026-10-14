@@ -57,15 +57,31 @@ elif command -v pamixer >/dev/null 2>&1; then
     fi
 fi
 
-# 4. Brightness (intel_backlight direct sysfs on Linux, IOKit on macOS)
-bri_icon=""
+# 4. Brightness (intel_backlight direct sysfs on Linux, DisplayServices/IOKit on macOS)
+bri_icon="󰖙"
 bri="n/a"
 if [ "$(uname)" = "Darwin" ]; then
-    read -r b_max b_cur <<EOF
+    bri_val=$(python3 -c "
+import ctypes
+try:
+    cg = ctypes.cdll.LoadLibrary('/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics')
+    ds = ctypes.cdll.LoadLibrary('/System/Library/PrivateFrameworks/DisplayServices.framework/DisplayServices')
+    main_id = cg.CGMainDisplayID()
+    val = ctypes.c_float()
+    if ds.DisplayServicesGetBrightness(main_id, ctypes.byref(val)) == 0 and val.value >= 0:
+        print(f'{round(val.value * 100)}%')
+except Exception:
+    pass
+" 2>/dev/null)
+    if [ -n "$bri_val" ]; then
+        bri="$bri_val"
+    else
+        read -r b_max b_cur <<EOF
 $(ioreg -r -d 1 -k IODisplayParameters 2>/dev/null | sed -n 's/.*"brightness"={"min"=[0-9]*,"max"=\([0-9]*\),"value"=\([0-9]*\)}.*/\1 \2/p')
 EOF
-    if [ -n "$b_max" ] && [ "$b_max" -gt 0 ]; then
-        bri="$(( b_cur * 100 / b_max ))%"
+        if [ -n "$b_max" ] && [ "$b_max" -gt 0 ]; then
+            bri="$(( b_cur * 100 / b_max ))%"
+        fi
     fi
 else
     backlight="/sys/class/backlight/intel_backlight"
@@ -148,7 +164,7 @@ fi
 
 # Output with greyed-out minimalist colors
 # Values: #6e7681 (muted gray), Separators: #484f58 (dark slate)
-printf "#[fg=#6e7681]%s %s #[fg=#484f58]| #[fg=#6e7681]%s %s #[fg=#484f58]| #[fg=#6e7681]%s %s #[fg=#484f58]| #[fg=#6e7681]%s %s #[fg=#484f58]| #[fg=#6e7681]%s %s " \
+printf "#[fg=#6e7681]%s %s #[fg=#484f58]| #[fg=#6e7681]%s %s #[fg=#484f58]| #[fg=#6e7681]%s %s #[fg=#484f58]| #[fg=#6e7681]%s %s #[fg=#484f58]| #[fg=#6e7681]%s  %s " \
     "" "$disk" \
     "$bat_icon" "${bat_cap}%" \
     "$vol_icon" "$vol" \
