@@ -9,14 +9,8 @@ return {
 
     -- Model settings for Ollama
     ollama = {
-      model = "llama3.2",
+      model = "muse-glimmer:30b-mlx",
       endpoint = "http://localhost:11434/v1/chat/completions",
-    },
-
-    -- Model settings for AGY
-    agy = {
-      cmd = "agy",
-      model = "gemini-3.8-flash-low",
     },
 
     -- Prompts directory (defaults to ~/.config/nvim/prompts)
