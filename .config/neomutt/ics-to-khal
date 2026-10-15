@@ -2,23 +2,15 @@
 """
 Interactive Google Calendar Invite & Cancellation Handler for NeoMutt
 - Reads an email with an .ics invite/cancellation from standard input.
-- Detects whether the event is NEW, an UPDATE/RESCHEDULE, or a CANCELLATION.
-- Target is always Google Calendar ('personal' calendar in khal/vdirsyncer).
-- For Cancellations:
-    - Checks for existing event with matching UID.
-    - Prompts user to remove event from Google Calendar.
-    - Triggers background vdirsyncer sync to delete remotely.
-- For Invites & Reschedules:
-    - Prompts user:
-        [a] Accept           (Add/update Google Calendar & send Accept reply)
-        [t] Tentative / Maybe(Add/update Google Calendar & send Tentative reply)
-        [d] Decline          (Remove from Google Calendar & send Decline reply)
-        [i] Import only      (Add/update Google Calendar without sending reply)
-        [o] Open Google Calendar in browser
-        [q] Cancel / Quit
-    - Updates existing events in place via 'khal import --batch' (no duplicates).
-    - Sends RFC 5546 standard REPLY emails via smart_sendmail.py.
-    - Asynchronously pushes changes to Google Calendar via vdirsyncer.
+- Displays event details in a clean banner.
+- Reads a single keypress [a/t/d/i/o/q] or [r/o/q] without requiring Enter.
+- As soon as a key is pressed:
+    - If [q]: instantly returns to NeoMutt (0ms delay).
+    - If [a/t/d/i/r]: instantly spawns a detached background worker and returns
+      to NeoMutt immediately so the user can navigate to the next email.
+    - The background worker executes khal import/update/delete, sends RFC 5546
+      RSVP emails via smart_sendmail.py, synchronizes via vdirsyncer, and notifies
+      the user in the tmux center status display.
 """
 
 import sys
@@ -103,6 +95,28 @@ def clean_email(addr_str):
         return m.group(1).strip()
     return addr.strip()
 
+def extract_ics(raw_bytes, msg=None):
+    if msg is None:
+        msg = email.message_from_bytes(raw_bytes)
+    ics_content = None
+    part_method = None
+    for part in msg.walk():
+        c_type = part.get_content_type()
+        f_name = part.get_filename() or ""
+        if c_type in ['text/calendar', 'application/ics'] or f_name.lower().endswith('.ics'):
+            payload = part.get_payload(decode=True)
+            if payload:
+                ics_content = payload
+                part_method = part.get_param('method')
+                break
+
+    if not ics_content and b"BEGIN:VCALENDAR" in raw_bytes:
+        start_idx = raw_bytes.find(b"BEGIN:VCALENDAR")
+        end_idx = raw_bytes.find(b"END:VCALENDAR")
+        if start_idx != -1 and end_idx != -1:
+            ics_content = raw_bytes[start_idx:end_idx + len(b"END:VCALENDAR")]
+    return ics_content, part_method
+
 def find_events_by_uid(uid):
     """Search local calendar storage for .ics files containing UID:<uid>."""
     if not uid:
@@ -158,36 +172,213 @@ def remove_event_file(fpath, summary=""):
     try:
         if os.path.exists(fpath):
             os.remove(fpath)
-            trigger_vdirsyncer_sync()
-            log(f"Removed event '{summary}' ({fpath}). Triggered vdirsyncer.")
+            log(f"Removed event '{summary}' ({fpath}).")
             return True
     except Exception as e:
         log(f"Failed to remove file '{fpath}': {e}")
     return False
 
+def get_single_key(tty_in):
+    """Read a single keypress without waiting for Enter."""
+    try:
+        import tty
+        import termios
+        fd = tty_in.fileno()
+        old_settings = termios.tcgetattr(fd)
+        try:
+            tty.setcbreak(fd)
+            ch = tty_in.read(1)
+            if ch in ['\r', '\n']:
+                return '\n'
+            if ch in ['\x03', '\x04', '\x1b']:
+                return 'q'
+            return ch.lower()
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+    except Exception:
+        line = tty_in.readline()
+        return line.strip().lower()[:1] if line else 'q'
+
+def run_worker(choice, user_email, tmp_eml_path):
+    """Background worker process executing import/RSVP/sync asynchronously."""
+    try:
+        with open(tmp_eml_path, "rb") as f:
+            raw_email = f.read()
+    except Exception as e:
+        log(f"Worker failed to read temp email '{tmp_eml_path}': {e}")
+        return
+
+    try:
+        msg = email.message_from_bytes(raw_email)
+        ics_content, _ = extract_ics(raw_email, msg)
+        if not ics_content:
+            log("Worker: No ics content found")
+            return
+
+        cal = icalendar.Calendar.from_ical(ics_content)
+        event = None
+        for comp in cal.walk('VEVENT'):
+            event = comp
+            break
+        if not event:
+            log("Worker: No VEVENT found")
+            return
+
+        summary = sanitize_header(str(event.get('summary', 'No Title')))
+        uid = str(event.get('uid', '')).strip()
+        dtstart = event.get('dtstart')
+        dtend = event.get('dtend')
+        organizer_raw = str(event.get('organizer', ''))
+        organizer = clean_email(organizer_raw)
+        organizer_name = ''
+        if event.get('organizer') and hasattr(event.get('organizer'), 'params'):
+            organizer_name = sanitize_header(str(event.get('organizer').params.get('cn', '')))
+
+        user_name = "Mickael Temporão"
+
+        # 1. Action: Remove / Cancel / Decline
+        if choice in ['r', 'd']:
+            existing = find_events_by_uid(uid)
+            for fpath, ev_sum in existing:
+                remove_event_file(fpath, ev_sum)
+            trigger_vdirsyncer_sync()
+            if choice == 'r':
+                log(f"Worker: Removed cancelled event '{summary}' (UID: {uid})")
+                notify("NeoMutt Calendar", f" Cancelled event removed: {summary}")
+
+        # 2. Action: Import / Update
+        if choice in ['a', 't', 'i']:
+            with tempfile.NamedTemporaryFile(suffix='.ics', delete=False) as f:
+                f.write(ics_content)
+                ics_path = f.name
+            try:
+                res = subprocess.run(
+                    ['khal', 'import', '--batch', '-a', TARGET_CAL, ics_path],
+                    capture_output=True,
+                    text=True
+                )
+                if res.returncode == 0:
+                    log(f"Worker: Successfully imported/updated '{summary}' (UID: {uid}) in '{TARGET_CAL}'")
+                    trigger_vdirsyncer_sync()
+                else:
+                    err_msg = res.stderr.strip() or res.stdout.strip()
+                    log(f"Worker: khal import warning/error for '{summary}': {err_msg}")
+                    trigger_vdirsyncer_sync()
+            finally:
+                if os.path.exists(ics_path):
+                    os.remove(ics_path)
+
+        # 3. Action: Send Reply Email
+        partstat = None
+        if choice == 'a':
+            partstat = "ACCEPTED"
+        elif choice == 't':
+            partstat = "TENTATIVE"
+        elif choice == 'd':
+            partstat = "DECLINED"
+
+        if partstat and organizer:
+            reply_cal = icalendar.Calendar()
+            reply_cal.add('prodid', '-//NeoMutt Calendar Responder//EN')
+            reply_cal.add('version', '2.0')
+            reply_cal.add('method', 'REPLY')
+
+            reply_event = icalendar.Event()
+            if uid:
+                reply_event.add('uid', uid)
+            reply_event.add('summary', summary)
+            if dtstart:
+                reply_event.add('dtstart', dtstart.dt if hasattr(dtstart, 'dt') else dtstart)
+            if dtend:
+                reply_event.add('dtend', dtend.dt if hasattr(dtend, 'dt') else dtend)
+            reply_event.add('organizer', icalendar.vCalAddress(f"mailto:{organizer}"))
+
+            attendee = icalendar.vCalAddress(f"mailto:{user_email}")
+            attendee.params['partstat'] = icalendar.vText(partstat)
+            attendee.params['cn'] = icalendar.vText(user_name)
+            attendee.params['role'] = icalendar.vText('REQ-PARTICIPANT')
+            reply_event.add('attendee', attendee)
+
+            reply_event.add('dtstamp', datetime.datetime.now(datetime.timezone.utc))
+            reply_cal.add_component(reply_event)
+
+            ics_reply_bytes = reply_cal.to_ical()
+
+            reply_msg = EmailMessage()
+            subject_status = "Accepted" if partstat == "ACCEPTED" else ("Tentative" if partstat == "TENTATIVE" else "Declined")
+            orig_subj = sanitize_header(msg.get('Subject', ''))
+            clean_subj = sanitize_header(re.sub(r'(?i)^(re:\s*)+', '', orig_subj))
+            subj_line = sanitize_header(f"{subject_status}: {clean_subj or summary}")
+            reply_msg['Subject'] = subj_line
+            reply_msg['From'] = f"{user_name} <{user_email}>"
+            reply_msg['To'] = f"{organizer_name} <{organizer}>" if organizer_name else organizer
+
+            orig_msg_id = sanitize_header(msg.get('Message-ID', ''))
+            if orig_msg_id:
+                reply_msg['In-Reply-To'] = orig_msg_id
+                reply_msg['References'] = orig_msg_id
+
+            body_text = f"{user_name} has {subject_status.lower()}: {summary}\n\nWhen: {format_cal_datetime(dtstart)}\n"
+            reply_msg.set_content(body_text)
+
+            reply_msg.add_attachment(
+                ics_reply_bytes,
+                maintype='text',
+                subtype='calendar',
+                filename='invite.ics',
+                params={'method': 'REPLY', 'charset': 'UTF-8'}
+            )
+
+            raw_reply_bytes = reply_msg.as_bytes()
+
+            sendmail_script = os.path.expanduser("~/.config/neomutt/smart_sendmail.py")
+            env = os.environ.copy()
+            env["PASSWORD_STORE_DIR"] = os.environ.get("PASSWORD_STORE_DIR", os.path.expanduser("~/.config/passwords"))
+            env["PATH"] = f"/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:{env.get('PATH', '')}"
+
+            proc = subprocess.Popen(
+                [sys.executable, sendmail_script],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                env=env
+            )
+            _, stderr = proc.communicate(input=raw_reply_bytes)
+
+            if proc.returncode == 0:
+                log(f"Worker: Response {partstat} for '{summary}' sent to {organizer}")
+                icon = "" if partstat in ["ACCEPTED", "TENTATIVE"] else ""
+                notify("NeoMutt Calendar", f"{icon} Event {partstat.lower()} & synced: {summary}")
+            else:
+                err_msg = stderr.decode('utf-8', errors='ignore').strip()
+                log(f"Worker: Failed to send {partstat} to {organizer}: {err_msg}")
+                notify("NeoMutt Calendar ERROR", f"Failed to send RSVP to {organizer}: {err_msg}")
+        elif choice == 'i':
+            notify("NeoMutt Calendar", f" Event imported & synced: {summary}")
+
+    except Exception as e:
+        log(f"Worker unhandled exception: {e}")
+        notify("NeoMutt Calendar ERROR", f"Calendar error: {e}")
+    finally:
+        if os.path.exists(tmp_eml_path):
+            try:
+                os.remove(tmp_eml_path)
+            except Exception:
+                pass
+
 def main():
+    # Handle background worker invocation
+    if len(sys.argv) > 4 and sys.argv[1] == "--worker":
+        choice = sys.argv[2]
+        user_email = sys.argv[3]
+        tmp_eml_path = sys.argv[4]
+        run_worker(choice, user_email, tmp_eml_path)
+        sys.exit(0)
+
     raw_email = sys.stdin.buffer.read()
     msg = email.message_from_bytes(raw_email)
 
-    ics_content = None
-    part_method = None
-    for part in msg.walk():
-        c_type = part.get_content_type()
-        f_name = part.get_filename() or ""
-        if c_type in ['text/calendar', 'application/ics'] or f_name.lower().endswith('.ics'):
-            payload = part.get_payload(decode=True)
-            if payload:
-                ics_content = payload
-                part_method = part.get_param('method')
-                break
-
-    if not ics_content:
-        if b"BEGIN:VCALENDAR" in raw_email:
-            start_idx = raw_email.find(b"BEGIN:VCALENDAR")
-            end_idx = raw_email.find(b"END:VCALENDAR")
-            if start_idx != -1 and end_idx != -1:
-                ics_content = raw_email[start_idx:end_idx + len(b"END:VCALENDAR")]
-
+    ics_content, part_method = extract_ics(raw_email, msg)
     if not ics_content:
         print("\n[!] No calendar invite (.ics) found in this email.")
         notify("NeoMutt Calendar", "No .ics calendar invite found in this email.")
@@ -223,7 +414,6 @@ def main():
     cal_method = str(cal.get('method', '')).upper()
     part_method = str(part_method).upper() if part_method else ""
 
-    user_name = "Mickael Temporão"
     user_email = detect_user_email(msg, event)
 
     # Detect cancellation
@@ -291,25 +481,17 @@ def main():
             while True:
                 tty_out.write(f"Select [{GREEN}r{RESET}/o/q] (default 'r'): ")
                 tty_out.flush()
-                line = tty_in.readline()
-                choice = line.strip().lower() if line else 'q'
-                if not choice:
+                ch = get_single_key(tty_in)
+                if ch in ['\n', 'r', '']:
                     choice = 'r'
-
-                if choice == 'r':
-                    for fpath, ev_sum in existing_events:
-                        remove_event_file(fpath, ev_sum)
-                    tty_print(f"{GREEN}-> Removed event from Google Calendar. Syncing changes in background.{RESET}")
-                    notify("NeoMutt Calendar", f" Cancelled event removed: {summary}")
                     break
-                elif choice == 'o':
+                elif ch == 'o':
                     query_url = "https://calendar.google.com/calendar/r/search?q=" + urllib.parse.quote(summary)
                     open_url(query_url)
-                    tty_print("-> Opened Google Calendar search in browser.")
+                    tty_print("\n-> Opened Google Calendar search in browser.")
                     continue
-                elif choice == 'q':
-                    tty_print("No changes made.")
-                    break
+                elif ch == 'q':
+                    sys.exit(0)
         else:
             tty_print(f"{'-' * 64}")
             tty_print(f"{YELLOW}Note: This cancelled event was not found in your Google Calendar (nothing to delete).{RESET}")
@@ -319,205 +501,82 @@ def main():
             while True:
                 tty_out.write("Select [o/q] (default 'q'): ")
                 tty_out.flush()
-                line = tty_in.readline()
-                choice = line.strip().lower() if line else 'q'
-                if not choice or choice == 'q':
-                    break
-                elif choice == 'o':
+                ch = get_single_key(tty_in)
+                if ch == 'o':
                     query_url = "https://calendar.google.com/calendar/r/search?q=" + urllib.parse.quote(summary)
                     open_url(query_url)
-                    tty_print("-> Opened Google Calendar search in browser.")
-                    break
-
-        tty_print("\nFinished. Press Enter to return to NeoMutt.")
-        tty_in.readline()
-        return
+                    continue
+                else:
+                    sys.exit(0)
 
     # ========================================================
     # FLOW 2: INVITE OR RESCHEDULE / UPDATE
     # ========================================================
-    tty_print("")
-    banner_color = CYAN if is_reschedule else BOLD
-    tty_print(f"{banner_color}{'=' * 64}{RESET}")
-    if is_reschedule:
-        tty_print(f"  {CYAN}{BOLD}CALENDAR UPDATE / RESCHEDULE: {summary}{RESET}")
     else:
-        tty_print(f"  {BOLD}CALENDAR INVITE: {summary}{RESET}")
-    tty_print(f"{banner_color}{'=' * 64}{RESET}")
-    tty_print(f"{BOLD}Organizer : {RESET}{organizer_name + ' <' + organizer + '>' if organizer_name else (organizer or 'N/A')}")
-    tty_print(f"{BOLD}Start     : {RESET}{format_cal_datetime(dtstart)}")
-    tty_print(f"{BOLD}End       : {RESET}{format_cal_datetime(dtend)}")
-    if location:
-        tty_print(f"{BOLD}Location  : {RESET}{location}")
-    if description:
-        desc_lines = [l for l in description.splitlines() if l.strip()]
-        desc_preview = "\n            ".join(desc_lines[:3])
-        if desc_preview:
-            tty_print(f"{BOLD}Details   : {RESET}{desc_preview}")
+        tty_print("")
+        banner_color = CYAN if is_reschedule else BOLD
+        tty_print(f"{banner_color}{'=' * 64}{RESET}")
+        if is_reschedule:
+            tty_print(f"  {CYAN}{BOLD}CALENDAR UPDATE / RESCHEDULE: {summary}{RESET}")
+        else:
+            tty_print(f"  {BOLD}CALENDAR INVITE: {summary}{RESET}")
+        tty_print(f"{banner_color}{'=' * 64}{RESET}")
+        tty_print(f"{BOLD}Organizer : {RESET}{organizer_name + ' <' + organizer + '>' if organizer_name else (organizer or 'N/A')}")
+        tty_print(f"{BOLD}Start     : {RESET}{format_cal_datetime(dtstart)}")
+        tty_print(f"{BOLD}End       : {RESET}{format_cal_datetime(dtend)}")
+        if location:
+            tty_print(f"{BOLD}Location  : {RESET}{location}")
+        if description:
+            desc_lines = [l for l in description.splitlines() if l.strip()]
+            desc_preview = "\n            ".join(desc_lines[:3])
+            if desc_preview:
+                tty_print(f"{BOLD}Details   : {RESET}{desc_preview}")
 
-    tty_print(f"{BOLD}Calendar  : {RESET}{GREEN}{CAL_LABEL}{RESET}")
-    if is_reschedule:
-        tty_print(f"{YELLOW}Notice    : [~] Existing event found! Accepting/importing will update it in place without duplicates.{RESET}")
-    tty_print(f"{'-' * 64}")
-    tty_print("Choose an action:")
-    action_verb = "Update" if is_reschedule else "Add to"
-    tty_print(f"  {GREEN}[a] Accept{RESET}           ({action_verb} Google Calendar & send Accept reply)")
-    tty_print(f"  {YELLOW}[t] Tentative / Maybe{RESET}({action_verb} Google Calendar & send Tentative reply)")
-    tty_print(f"  {RED}[d] Decline{RESET}          (Remove from Google Calendar & send Decline reply)")
-    tty_print(f"  [i] Import only      ({action_verb} Google Calendar without sending reply)")
-    tty_print("  [o] Open Google Calendar in browser")
-    tty_print("  [q] Cancel / Quit")
-    tty_print(f"{'-' * 64}")
+        tty_print(f"{BOLD}Calendar  : {RESET}{GREEN}{CAL_LABEL}{RESET}")
+        if is_reschedule:
+            tty_print(f"{YELLOW}Notice    : [~] Existing event found! Accepting/importing will update it in place without duplicates.{RESET}")
+        tty_print(f"{'-' * 64}")
+        tty_print("Choose an action:")
+        action_verb = "Update" if is_reschedule else "Add to"
+        tty_print(f"  {GREEN}[a] Accept{RESET}           ({action_verb} Google Calendar & send Accept reply)")
+        tty_print(f"  {YELLOW}[t] Tentative / Maybe{RESET}({action_verb} Google Calendar & send Tentative reply)")
+        tty_print(f"  {RED}[d] Decline{RESET}          (Remove from Google Calendar & send Decline reply)")
+        tty_print(f"  [i] Import only      ({action_verb} Google Calendar without sending reply)")
+        tty_print("  [o] Open Google Calendar in browser")
+        tty_print("  [q] Cancel / Quit")
+        tty_print(f"{'-' * 64}")
 
-    choice = ""
-    while True:
-        tty_out.write("Select [a/t/d/i/o/q]: ")
-        tty_out.flush()
-        line = tty_in.readline()
-        if not line:
-            choice = 'q'
-            break
-        choice = line.strip().lower()
-
-        if choice == 'o':
-            query_url = "https://calendar.google.com/calendar/r/search?q=" + urllib.parse.quote(summary)
-            open_url(query_url)
-            tty_print("-> Opened Google Calendar search in browser.")
-            continue
-        elif choice in ['a', 't', 'd', 'i', 'q']:
-            break
+        while True:
+            tty_out.write("Select [a/t/d/i/o/q]: ")
+            tty_out.flush()
+            ch = get_single_key(tty_in)
+            if ch == 'o':
+                query_url = "https://calendar.google.com/calendar/r/search?q=" + urllib.parse.quote(summary)
+                open_url(query_url)
+                tty_print("\n-> Opened Google Calendar search in browser.")
+                continue
+            elif ch in ['a', 't', 'd', 'i', 'q']:
+                choice = ch
+                break
 
     if choice == 'q':
-        tty_print("Action cancelled.")
-        return
+        sys.exit(0)
 
-    partstat = None
-    if choice == 'a':
-        partstat = "ACCEPTED"
-    elif choice == 't':
-        partstat = "TENTATIVE"
-    elif choice == 'd':
-        partstat = "DECLINED"
+    # Spawn detached background worker and immediately exit back to NeoMutt!
+    with tempfile.NamedTemporaryFile(delete=False, suffix='.eml') as f:
+        f.write(raw_email)
+        tmp_eml_path = f.name
 
-    # 1. Handle Import / Update (Accept, Tentative, or Import only)
-    if choice in ['a', 't', 'i']:
-        with tempfile.NamedTemporaryFile(suffix='.ics', delete=False) as f:
-            f.write(ics_content)
-            ics_path = f.name
-        try:
-            # khal import --batch automatically updates existing UID without prompting or duplicating!
-            res = subprocess.run(
-                ['khal', 'import', '--batch', '-a', TARGET_CAL, ics_path],
-                capture_output=True,
-                text=True
-            )
-            if res.returncode == 0:
-                verb = "Updated" if is_reschedule else "Imported"
-                tty_print(f"{GREEN}-> Successfully {verb.lower()} event in Google Calendar.{RESET}")
-                trigger_vdirsyncer_sync()
-                log(f"{verb} event '{summary}' (UID: {uid}) in '{TARGET_CAL}'")
-            else:
-                err_msg = res.stderr.strip() or res.stdout.strip()
-                tty_print(f"{YELLOW}[!] Note: khal import result: {err_msg}{RESET}")
-                trigger_vdirsyncer_sync()
-        finally:
-            if os.path.exists(ics_path):
-                os.remove(ics_path)
-
-    # 2. Handle Decline (Remove existing event if present)
-    if choice == 'd':
-        if existing_events:
-            for fpath, ev_sum in existing_events:
-                remove_event_file(fpath, ev_sum)
-            tty_print(f"{YELLOW}-> Removed event from Google Calendar.{RESET}")
-        else:
-            tty_print("-> Event marked as declined.")
-
-    # 3. Handle Reply Email (Accept, Tentative, Decline)
-    if partstat and organizer:
-        tty_print(f"-> Sending {partstat} response to {organizer}...")
-
-        reply_cal = icalendar.Calendar()
-        reply_cal.add('prodid', '-//NeoMutt Calendar Responder//EN')
-        reply_cal.add('version', '2.0')
-        reply_cal.add('method', 'REPLY')
-
-        reply_event = icalendar.Event()
-        if uid:
-            reply_event.add('uid', uid)
-        reply_event.add('summary', summary)
-        if dtstart:
-            reply_event.add('dtstart', dtstart.dt if hasattr(dtstart, 'dt') else dtstart)
-        if dtend:
-            reply_event.add('dtend', dtend.dt if hasattr(dtend, 'dt') else dtend)
-        reply_event.add('organizer', icalendar.vCalAddress(f"mailto:{organizer}"))
-
-        attendee = icalendar.vCalAddress(f"mailto:{user_email}")
-        attendee.params['partstat'] = icalendar.vText(partstat)
-        attendee.params['cn'] = icalendar.vText(user_name)
-        attendee.params['role'] = icalendar.vText('REQ-PARTICIPANT')
-        reply_event.add('attendee', attendee)
-
-        reply_event.add('dtstamp', datetime.datetime.now(datetime.timezone.utc))
-        reply_cal.add_component(reply_event)
-
-        ics_reply_bytes = reply_cal.to_ical()
-
-        reply_msg = EmailMessage()
-        subject_status = "Accepted" if partstat == "ACCEPTED" else ("Tentative" if partstat == "TENTATIVE" else "Declined")
-        orig_subj = sanitize_header(msg.get('Subject', ''))
-        clean_subj = sanitize_header(re.sub(r'(?i)^(re:\s*)+', '', orig_subj))
-        subj_line = sanitize_header(f"{subject_status}: {clean_subj or summary}")
-        reply_msg['Subject'] = subj_line
-        reply_msg['From'] = f"{user_name} <{user_email}>"
-        reply_msg['To'] = f"{organizer_name} <{organizer}>" if organizer_name else organizer
-
-        orig_msg_id = sanitize_header(msg.get('Message-ID', ''))
-        if orig_msg_id:
-            reply_msg['In-Reply-To'] = orig_msg_id
-            reply_msg['References'] = orig_msg_id
-
-        body_text = f"{user_name} has {subject_status.lower()}: {summary}\n\nWhen: {format_cal_datetime(dtstart)}\n"
-        reply_msg.set_content(body_text)
-
-        reply_msg.add_attachment(
-            ics_reply_bytes,
-            maintype='text',
-            subtype='calendar',
-            filename='invite.ics',
-            params={'method': 'REPLY', 'charset': 'UTF-8'}
-        )
-
-        raw_reply_bytes = reply_msg.as_bytes()
-
-        sendmail_script = os.path.expanduser("~/.config/neomutt/smart_sendmail.py")
-        env = os.environ.copy()
-        env["PASSWORD_STORE_DIR"] = os.environ.get("PASSWORD_STORE_DIR", os.path.expanduser("~/.config/passwords"))
-        env["PATH"] = f"/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:{env.get('PATH', '')}"
-
-        proc = subprocess.Popen(
-            [sys.executable, sendmail_script],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            env=env
-        )
-        stdout, stderr = proc.communicate(input=raw_reply_bytes)
-
-        if proc.returncode == 0:
-            tty_print(f"{GREEN}-> Response sent successfully ({partstat})!{RESET}")
-            log(f"Response {partstat} for '{summary}' sent to {organizer}")
-            icon = "" if partstat in ["ACCEPTED", "TENTATIVE"] else ""
-            notify("NeoMutt Calendar", f"{icon} Event {partstat.lower()} & synced: {summary}")
-        else:
-            err_msg = stderr.decode('utf-8', errors='ignore').strip()
-            tty_print(f"{RED}[!] Error sending reply: {err_msg}{RESET}")
-            log(f"Failed to send {partstat} to {organizer}: {err_msg}")
-    elif choice == 'i':
-        notify("NeoMutt Calendar", f" Event imported & synced: {summary}")
-
-    tty_print("\nFinished. Press Enter to return to NeoMutt.")
-    tty_in.readline()
+    subprocess.Popen(
+        [sys.executable, os.path.abspath(__file__), "--worker", choice, user_email, tmp_eml_path],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+        close_fds=True
+    )
+    # Return immediately to NeoMutt with 0ms delay
+    sys.exit(0)
 
 if __name__ == '__main__':
     main()
