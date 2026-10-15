@@ -1,39 +1,65 @@
 # vdirsyncer configuration template
-# Syncs CardDAV and CalDAV to local directories for khal/khard
+# Syncs CardDAV (Exchange contacts) and CalDAV (Google Calendar + Exchange) to local directories for khal/khard
 
 [general]
-status_path = "~/.local/state/vdirsyncer/status"
+status_path = "~/.local/share/vdirsyncer/status/"
 
-# --- WORK CALENDAR (via DavMail) ---
+# ----------------------------------------------------
+# WORK CALENDAR (EXCHANGE VIA DAVMAIL CALDAV)
+# ----------------------------------------------------
 [pair work_calendar]
-a = "work_calendar_local"
-b = "work_calendar_remote"
-collections = ["from a", "from b"]
+a = "work_local"
+b = "work_remote"
+collections = null
 
-[storage work_calendar_local]
+[storage work_local]
 type = "filesystem"
 path = "~/.local/share/calendars/work/"
 fileext = ".ics"
 
-[storage work_calendar_remote]
+[storage work_remote]
 type = "caldav"
-url = "http://127.0.0.1:1080/users/your.username/calendar/"
-user = "your.username"
-password.fetch = ["command", "pass", "email/work"]
+url = "http://127.0.0.1:1080/users/username/calendar/"
+username = "username"
+password.fetch = ["command", "pass", "show", "email/work"]
 
-# --- WORK CONTACTS (via DavMail) ---
-[pair work_contacts]
-a = "work_contacts_local"
-b = "work_contacts_remote"
-collections = ["from a", "from b"]
+# ----------------------------------------------------
+# PERSONAL CALENDAR (GOOGLE CALENDAR VIA OAUTH)
+# ----------------------------------------------------
+[pair personal_calendar]
+a = "personal_local"
+b = "personal_remote"
+collections = [["personal", "personal", "your.email@gmail.com"]]
+metadata = ["color", "displayname"]
 
-[storage work_contacts_local]
+[storage personal_local]
+type = "filesystem"
+path = "~/.local/share/calendars/"
+fileext = ".ics"
+
+[storage personal_remote]
+type = "google_calendar"
+token_file = "~/.local/share/vdirsyncer/google_token"
+client_id.fetch = ["command", "pass", "show", "google/vdirsyncer_client_id"]
+client_secret.fetch = ["command", "pass", "show", "google/vdirsyncer_client_secret"]
+start_date = "datetime.now() - timedelta(days=90)"
+end_date = "datetime.now() + timedelta(days=365)"
+
+# ----------------------------------------------------
+# UNIFIED CONTACTS (WORK EXCHANGE VIA DAVMAIL CARDDAV)
+# ----------------------------------------------------
+[pair contacts]
+a = "contacts_local"
+b = "contacts_remote"
+collections = null
+
+[storage contacts_local]
 type = "filesystem"
 path = "~/.local/share/contacts/contacts/"
 fileext = ".vcf"
 
-[storage work_contacts_remote]
+[storage contacts_remote]
 type = "carddav"
-url = "http://127.0.0.1:1080/users/your.username@institution.org/contacts/"
-user = "your.username"
-password.fetch = ["command", "pass", "email/work"]
+url = "http://127.0.0.1:1080/users/your.email@institution.org/contacts/"
+username = "username"
+password.fetch = ["command", "pass", "show", "email/work"]

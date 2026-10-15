@@ -91,9 +91,9 @@ PID_PERSONAL=$!
 wait $PID_WORK
 wait $PID_PERSONAL
 
-# Sync Contacts (CardDAV via DavMail to local VCF)
+# Sync Contacts (CardDAV via DavMail) & Google Calendar (CalDAV via vdirsyncer)
 if command -v vdirsyncer >/dev/null 2>&1; then
-    run_timeout vdirsyncer sync contacts >/dev/null 2>&1 &
+    run_timeout vdirsyncer sync contacts personal_calendar >/dev/null 2>&1 &
 fi
 
 # Flush any outbound emails queued during IMAP synchronization

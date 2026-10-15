@@ -1,19 +1,24 @@
 #!/usr/bin/env python3
 """
-Interactive Calendar Invite Responder for NeoMutt
-- Reads an email with an .ics invite from standard input.
-- Displays the event details (Title, Organizer, Time, Location, Description).
-- Prompts the user:
-    [a] Accept           (Import to calendar & send Accept reply)
-    [t] Tentative/Maybe  (Import to calendar & send Tentative reply)
-    [d] Decline          (Send Decline reply)
-    [i] Import only      (Add to calendar without sending reply)
-    [q] Cancel / Quit
-- On Accept / Tentative:
-    1. Imports the event into the selected Khal calendar (work or personal).
-    2. Sends an RFC 5546 standard iCalendar REPLY to the organizer with PARTSTAT=ACCEPTED or TENTATIVE.
-- On Decline:
-    1. Sends an RFC 5546 standard iCalendar REPLY with PARTSTAT=DECLINED.
+Interactive Calendar Invite & Cancellation Handler for NeoMutt
+- Reads an email with an .ics invite/cancellation from standard input.
+- Detects whether the event is NEW, an UPDATE/RESCHEDULE, or a CANCELLATION.
+- For Cancellations:
+    - Checks local calendars (personal / work) for matching UID.
+    - Prompts user to remove the event from local calendar and Google Calendar.
+    - Synchronizes deletion to remote CalDAV/Google Calendar in the background.
+- For Invites & Reschedules:
+    - Prompts user:
+        [a] Accept           (Update/Add to calendar & send Accept reply)
+        [t] Tentative / Maybe(Update/Add to calendar & send Tentative reply)
+        [d] Decline          (Remove from calendar & send Decline reply)
+        [i] Import only      (Add/update calendar without sending reply)
+        [c] Change calendar  (Toggle Personal <-> Work)
+        [o] Open in Google Calendar (Browser)
+        [q] Cancel / Quit
+    - Automatically updates existing events in place via 'khal import --batch' (no duplicates).
+    - Sends RFC 5546 standard REPLY emails via smart_sendmail.py.
+    - Asynchronously pushes changes to Google Calendar / CalDAV via vdirsyncer.
 """
 
 import sys
@@ -24,24 +29,63 @@ from email.message import EmailMessage
 import tempfile
 import subprocess
 import datetime
+import urllib.parse
 import icalendar
 
+LOG_FILE = os.path.expanduser("~/.config/neomutt/schedule.log")
+CALENDARS_DIR = os.path.expanduser("~/.local/share/calendars")
+
 def log(msg):
-    log_file = os.path.expanduser("~/.config/neomutt/schedule.log")
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    line = f"[{timestamp}] [cal-responder] {msg}\n"
+    line = f"[{timestamp}] [ics-to-khal] {msg}\n"
     try:
-        with open(log_file, "a", encoding="utf-8") as f:
+        with open(LOG_FILE, "a", encoding="utf-8") as f:
             f.write(line)
     except Exception:
         pass
+
+def notify(title, msg):
+    # In-tmux status bar notification (center display, cross-platform Linux & macOS)
+    try:
+        text = f"{title}: {msg}"
+        subprocess.run(["tmux", "set", "-g", "@notification", text], capture_output=True, check=False)
+        subprocess.run(["tmux", "refresh-client", "-S"], capture_output=True, check=False)
+        subprocess.run(["tmux", "run-shell", "-b", "sleep 5 && tmux set -gu @notification && tmux refresh-client -S"], capture_output=True, check=False)
+    except Exception:
+        pass
+
+def open_url(url):
+    cmd = 'open' if sys.platform == 'darwin' else 'xdg-open'
+    try:
+        subprocess.Popen([cmd, url], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception as e:
+        log(f"Failed to open URL {url}: {e}")
+
+def trigger_vdirsyncer_sync(cal_name):
+    """
+    Trigger background vdirsyncer sync for the given calendar pair.
+    Runs asynchronously and detached so NeoMutt never blocks.
+    """
+    pair_name = f"{cal_name}_calendar"
+    try:
+        subprocess.Popen(
+            ["vdirsyncer", "sync", pair_name],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True
+        )
+        log(f"Triggered background vdirsyncer sync for '{pair_name}'")
+    except Exception as e:
+        log(f"Failed to trigger vdirsyncer sync for '{pair_name}': {e}")
 
 def format_cal_datetime(dt_val):
     if dt_val is None:
         return "N/A"
     dt = dt_val.dt if hasattr(dt_val, 'dt') else dt_val
     if isinstance(dt, datetime.datetime):
-        return dt.strftime("%A, %d %B %Y at %H:%M %Z").strip()
+        tz_name = dt.strftime("%Z").strip()
+        tz_str = f" {tz_name}" if tz_name else ""
+        return dt.strftime("%A, %d %B %Y at %H:%M") + tz_str
     elif isinstance(dt, datetime.date):
         return dt.strftime("%A, %d %B %Y (All day)")
     return str(dt)
@@ -55,18 +99,100 @@ def clean_email(addr_str):
         return m.group(1).strip()
     return addr.strip()
 
+def find_events_by_uid(uid):
+    """
+    Search ~/.local/share/calendars/ (personal & work) for .ics files containing UID:<uid>.
+    Returns list of tuples: (calendar_name, filepath, summary)
+    """
+    if not uid:
+        return []
+    clean_uid = uid.strip()
+    results = []
+    if not os.path.isdir(CALENDARS_DIR):
+        return results
+
+    for cal_name in ["personal", "work"]:
+        cal_path = os.path.join(CALENDARS_DIR, cal_name)
+        if not os.path.isdir(cal_path):
+            continue
+        for root, dirs, files in os.walk(cal_path):
+            for fname in files:
+                if not fname.endswith(".ics"):
+                    continue
+                fpath = os.path.join(root, fname)
+                try:
+                    with open(fpath, "r", encoding="utf-8", errors="ignore") as f:
+                        content = f.read()
+                    found = False
+                    if clean_uid in content:
+                        found = True
+                    else:
+                        unfolded = re.sub(r'\r?\n[ \t]', '', content)
+                        if f"UID:{clean_uid}" in unfolded:
+                            found = True
+                    if found:
+                        m = re.search(r'(?i)^SUMMARY:(.*)$', content, re.MULTILINE)
+                        ev_sum = m.group(1).strip() if m else fname
+                        results.append((cal_name, fpath, ev_sum))
+                except Exception:
+                    continue
+    return results
+
+def detect_calendar(msg, event=None, explicit_cal=None):
+    if explicit_cal in ["personal", "work"]:
+        return explicit_cal
+    
+    # Check headers
+    headers_to_check = ['To', 'Delivered-To', 'Cc', 'X-Original-To', 'Envelope-To', 'Resent-To']
+    combined_recipients = " ".join(str(msg.get(h, '')).lower() for h in headers_to_check)
+    
+    if "gmail.com" in combined_recipients:
+        return "personal"
+    if "sciencespobordeaux.fr" in combined_recipients or "scpobx.fr" in combined_recipients:
+        return "work"
+
+    # Check attendees in calendar component
+    if event:
+        attendees = event.get('attendee')
+        if attendees:
+            if not isinstance(attendees, list):
+                attendees = [attendees]
+            for att in attendees:
+                att_str = str(att).lower()
+                if "gmail.com" in att_str:
+                    return "personal"
+                if "sciencespobordeaux.fr" in att_str or "scpobx.fr" in att_str:
+                    return "work"
+
+    # Default to personal (Google Calendar)
+    return "personal"
+
+def remove_event_file(cal_name, fpath, summary=""):
+    try:
+        if os.path.exists(fpath):
+            os.remove(fpath)
+            trigger_vdirsyncer_sync(cal_name)
+            log(f"Removed event '{summary}' ({fpath}) from '{cal_name}'. Triggered vdirsyncer.")
+            return True
+    except Exception as e:
+        log(f"Failed to remove file '{fpath}': {e}")
+    return False
+
 def main():
-    target_cal = sys.argv[1] if len(sys.argv) > 1 else "work"
+    explicit_cal = sys.argv[1].lower() if len(sys.argv) > 1 and sys.argv[1].lower() in ["work", "personal"] else None
     raw_email = sys.stdin.buffer.read()
     msg = email.message_from_bytes(raw_email)
 
     ics_content = None
+    part_method = None
     for part in msg.walk():
-        content_type = part.get_content_type()
-        if content_type in ['text/calendar', 'application/ics']:
+        c_type = part.get_content_type()
+        f_name = part.get_filename() or ""
+        if c_type in ['text/calendar', 'application/ics'] or f_name.lower().endswith('.ics'):
             payload = part.get_payload(decode=True)
             if payload:
                 ics_content = payload
+                part_method = part.get_param('method')
                 break
 
     if not ics_content:
@@ -78,6 +204,7 @@ def main():
 
     if not ics_content:
         print("\n[!] No calendar invite (.ics) found in this email.")
+        notify("NeoMutt Calendar", "No .ics calendar invite found in this email.")
         sys.exit(1)
 
     try:
@@ -105,63 +232,196 @@ def main():
     dtend = event.get('dtend')
     location = str(event.get('location', '')).strip()
     description = str(event.get('description', '')).strip()
-    uid = str(event.get('uid', ''))
+    uid = str(event.get('uid', '')).strip()
+    status = str(event.get('status', '')).upper()
+    cal_method = str(cal.get('method', '')).upper()
+    part_method = str(part_method).upper() if part_method else ""
 
-    if target_cal == "personal":
-        user_name = "Mickael Temporão"
-        user_email = "mickael.temporao@gmail.com"
+    # Detect cancellation
+    is_cancelled = False
+    if "CANCEL" in [cal_method, part_method] or status == "CANCELLED":
+        is_cancelled = True
+    elif re.search(r'(?i)^(cancelled|canceled):', summary) or re.search(r'(?i)^(cancelled|canceled):', msg.get('Subject', '')):
+        is_cancelled = True
+
+    # Check for existing events with this UID
+    existing_events = find_events_by_uid(uid)
+    is_reschedule = (len(existing_events) > 0) and not is_cancelled
+
+    # Initial target calendar
+    if existing_events:
+        target_cal = existing_events[0][0]
     else:
-        user_name = "Mickael Temporão"
-        user_email = "m.temporao@sciencespobordeaux.fr"
+        target_cal = detect_calendar(msg, event, explicit_cal)
 
+    # TTY handling for interactive prompt overlay
     try:
-        tty_in = open("/dev/tty", "r")
-        tty_out = open("/dev/tty", "w")
+        if os.environ.get("TEST_TTY_INPUT"):
+            import io
+            tty_in = io.StringIO(os.environ["TEST_TTY_INPUT"] + "\n\n")
+            tty_out = sys.stdout
+            is_interactive = False
+        else:
+            tty_in = open("/dev/tty", "r")
+            tty_out = open("/dev/tty", "w")
+            is_interactive = tty_out.isatty()
     except Exception:
         tty_in = sys.stdin
         tty_out = sys.stdout
+        is_interactive = False
+
+    BOLD = "\033[1m" if is_interactive else ""
+    GREEN = "\033[1;32m" if is_interactive else ""
+    RED = "\033[1;31m" if is_interactive else ""
+    YELLOW = "\033[1;33m" if is_interactive else ""
+    CYAN = "\033[1;36m" if is_interactive else ""
+    RESET = "\033[0m" if is_interactive else ""
 
     def tty_print(s=""):
         tty_out.write(s + "\n")
         tty_out.flush()
 
-    tty_print("")
-    tty_print("=" * 64)
-    tty_print(f"  CALENDAR INVITE: {summary}")
-    tty_print("=" * 64)
-    tty_print(f"Organizer : {organizer_name + ' <' + organizer + '>' if organizer_name else organizer}")
-    tty_print(f"Start     : {format_cal_datetime(dtstart)}")
-    tty_print(f"End       : {format_cal_datetime(dtend)}")
-    if location:
-        tty_print(f"Location  : {location}")
-    if description:
-        desc_lines = [l for l in description.splitlines() if l.strip()]
-        desc_preview = "\n            ".join(desc_lines[:3])
-        if desc_preview:
-            tty_print(f"Details   : {desc_preview}")
-    tty_print(f"Calendar  : {target_cal.upper()} ({user_email})")
-    tty_print("-" * 64)
-    tty_print("Choose an action:")
-    tty_print("  [a] Accept           (Import to calendar & send Accept reply)")
-    tty_print("  [t] Tentative / Maybe(Import to calendar & send Tentative reply)")
-    tty_print("  [d] Decline          (Send Decline reply)")
-    tty_print("  [i] Import only      (Add to calendar without sending reply)")
-    tty_print("  [q] Cancel / Quit")
-    tty_print("-" * 64)
+    # ========================================================
+    # FLOW 1: CANCELLATION NOTICE
+    # ========================================================
+    if is_cancelled:
+        tty_print("")
+        tty_print(f"{RED}{'=' * 64}{RESET}")
+        tty_print(f"  {RED}{BOLD}EVENT CANCELLATION NOTICE: {summary}{RESET}")
+        tty_print(f"{RED}{'=' * 64}{RESET}")
+        tty_print(f"{BOLD}Organizer : {RESET}{organizer_name + ' <' + organizer + '>' if organizer_name else (organizer or 'Unknown')}")
+        tty_print(f"{BOLD}Start     : {RESET}{format_cal_datetime(dtstart)}")
+        tty_print(f"{BOLD}End       : {RESET}{format_cal_datetime(dtend)}")
+        if location:
+            tty_print(f"{BOLD}Location  : {RESET}{location}")
+        tty_print(f"{BOLD}Status    : {RESET}{RED}CANCELLED by organizer{RESET}")
 
-    choice = ""
-    while choice not in ['a', 't', 'd', 'i', 'q']:
-        tty_out.write("Select [a/t/d/i/q]: ")
-        tty_out.flush()
-        line = tty_in.readline()
-        if not line:
-            choice = 'q'
-            break
-        choice = line.strip().lower()
+        if existing_events:
+            found_cals = ", ".join(f"'{c}'" for c, _, _ in existing_events)
+            tty_print(f"{BOLD}On Calendar: {RESET}{YELLOW}Found matching event in {found_cals} calendar{RESET}")
+            tty_print(f"{'-' * 64}")
+            tty_print(f"Action:")
+            tty_print(f"  {GREEN}[r] Remove from calendar & Google Calendar{RESET} (Recommended)")
+            tty_print(f"  [o] Open Google Calendar in browser")
+            tty_print(f"  [q] Keep event / Quit without changes")
+            tty_print(f"{'-' * 64}")
 
-    if choice == 'q':
-        tty_print("Action cancelled.")
+            while True:
+                tty_out.write(f"Select [{GREEN}r{RESET}/o/q] (default 'r'): ")
+                tty_out.flush()
+                line = tty_in.readline()
+                choice = line.strip().lower() if line else 'q'
+                if not choice:
+                    choice = 'r'
+
+                if choice == 'r':
+                    for cal_name, fpath, ev_sum in existing_events:
+                        remove_event_file(cal_name, fpath, ev_sum)
+                    tty_print(f"{GREEN}-> Removed event from calendar. Changes syncing to Google Calendar in background.{RESET}")
+                    notify("NeoMutt Calendar", f" Cancelled event removed: {summary}")
+                    break
+                elif choice == 'o':
+                    query_url = "https://calendar.google.com/calendar/r/search?q=" + urllib.parse.quote(summary)
+                    open_url(query_url)
+                    tty_print("-> Opened Google Calendar search in browser.")
+                    continue
+                elif choice == 'q':
+                    tty_print("No changes made.")
+                    break
+        else:
+            tty_print(f"{'-' * 64}")
+            tty_print(f"{YELLOW}Note: This cancelled event was not found in your local calendars (nothing to delete).{RESET}")
+            tty_print(f"  [o] Search for it on Google Calendar in browser")
+            tty_print(f"  [q] Return to NeoMutt")
+            tty_print(f"{'-' * 64}")
+            while True:
+                tty_out.write("Select [o/q] (default 'q'): ")
+                tty_out.flush()
+                line = tty_in.readline()
+                choice = line.strip().lower() if line else 'q'
+                if not choice or choice == 'q':
+                    break
+                elif choice == 'o':
+                    query_url = "https://calendar.google.com/calendar/r/search?q=" + urllib.parse.quote(summary)
+                    open_url(query_url)
+                    tty_print("-> Opened Google Calendar search in browser.")
+                    break
+
+        tty_print("\nFinished. Press Enter to return to NeoMutt.")
+        tty_in.readline()
         return
+
+    # ========================================================
+    # FLOW 2: INVITE OR RESCHEDULE / UPDATE
+    # ========================================================
+    while True:
+        if target_cal == "personal":
+            user_name = "Mickael Temporão"
+            user_email = "mickael.temporao@gmail.com"
+            cal_label = "PERSONAL (Google Calendar)"
+        else:
+            user_name = "Mickael Temporão"
+            user_email = "m.temporao@sciencespobordeaux.fr"
+            cal_label = "WORK (Exchange via DavMail)"
+
+        tty_print("")
+        banner_color = CYAN if is_reschedule else BOLD
+        tty_print(f"{banner_color}{'=' * 64}{RESET}")
+        if is_reschedule:
+            tty_print(f"  {CYAN}{BOLD}CALENDAR UPDATE / RESCHEDULE: {summary}{RESET}")
+        else:
+            tty_print(f"  {BOLD}CALENDAR INVITE: {summary}{RESET}")
+        tty_print(f"{banner_color}{'=' * 64}{RESET}")
+        tty_print(f"{BOLD}Organizer : {RESET}{organizer_name + ' <' + organizer + '>' if organizer_name else (organizer or 'N/A')}")
+        tty_print(f"{BOLD}Start     : {RESET}{format_cal_datetime(dtstart)}")
+        tty_print(f"{BOLD}End       : {RESET}{format_cal_datetime(dtend)}")
+        if location:
+            tty_print(f"{BOLD}Location  : {RESET}{location}")
+        if description:
+            desc_lines = [l for l in description.splitlines() if l.strip()]
+            desc_preview = "\n            ".join(desc_lines[:3])
+            if desc_preview:
+                tty_print(f"{BOLD}Details   : {RESET}{desc_preview}")
+        
+        tty_print(f"{BOLD}Target Cal: {RESET}{GREEN}{cal_label}{RESET} <{user_email}>")
+        if is_reschedule:
+            tty_print(f"{YELLOW}Notice    : [~] Existing event found! Accepting/importing will update it in place without duplicates.{RESET}")
+        tty_print(f"{'-' * 64}")
+        tty_print("Choose an action:")
+        action_verb = "Update" if is_reschedule else "Add to"
+        tty_print(f"  {GREEN}[a] Accept{RESET}           ({action_verb} calendar & send Accept reply)")
+        tty_print(f"  {YELLOW}[t] Tentative / Maybe{RESET}({action_verb} calendar & send Tentative reply)")
+        tty_print(f"  {RED}[d] Decline{RESET}          (Remove from calendar & send Decline reply)")
+        tty_print(f"  [i] Import only      ({action_verb} calendar without sending reply)")
+        other_cal = "WORK" if target_cal == "personal" else "PERSONAL"
+        tty_print(f"  [c] Change calendar  (Switch to {other_cal})")
+        tty_print(f"  [o] Open Google Calendar in browser")
+        tty_print(f"  [q] Cancel / Quit")
+        tty_print(f"{'-' * 64}")
+
+        choice = ""
+        while choice not in ['a', 't', 'd', 'i', 'c', 'o', 'q']:
+            tty_out.write("Select [a/t/d/i/c/o/q]: ")
+            tty_out.flush()
+            line = tty_in.readline()
+            if not line:
+                choice = 'q'
+                break
+            choice = line.strip().lower()
+
+        if choice == 'c':
+            target_cal = "work" if target_cal == "personal" else "personal"
+            continue
+        elif choice == 'o':
+            query_url = "https://calendar.google.com/calendar/r/search?q=" + urllib.parse.quote(summary)
+            open_url(query_url)
+            tty_print("-> Opened Google Calendar search in browser.")
+            continue
+        elif choice == 'q':
+            tty_print("Action cancelled.")
+            return
+        else:
+            break
 
     partstat = None
     if choice == 'a':
@@ -171,27 +431,41 @@ def main():
     elif choice == 'd':
         partstat = "DECLINED"
 
-    # 1. Handle Calendar Import (Accept, Tentative, or Import only)
+    # 1. Handle Import / Update (Accept, Tentative, or Import only)
     if choice in ['a', 't', 'i']:
         with tempfile.NamedTemporaryFile(suffix='.ics', delete=False) as f:
             f.write(ics_content)
             ics_path = f.name
         try:
+            # khal import --batch automatically updates existing UID without prompting or duplicating!
             res = subprocess.run(
                 ['khal', 'import', '--batch', '-a', target_cal, ics_path],
                 capture_output=True,
                 text=True
             )
             if res.returncode == 0:
-                tty_print(f"-> Successfully imported event into '{target_cal}' calendar.")
+                verb = "Updated" if is_reschedule else "Imported"
+                tty_print(f"{GREEN}-> Successfully {verb.lower()} event in '{target_cal}' calendar.{RESET}")
+                trigger_vdirsyncer_sync(target_cal)
+                log(f"{verb} event '{summary}' (UID: {uid}) in '{target_cal}'")
             else:
                 err_msg = res.stderr.strip() or res.stdout.strip()
-                tty_print(f"[!] Note: khal import result: {err_msg}")
+                tty_print(f"{YELLOW}[!] Note: khal import result: {err_msg}{RESET}")
+                trigger_vdirsyncer_sync(target_cal)
         finally:
             if os.path.exists(ics_path):
                 os.remove(ics_path)
 
-    # 2. Handle Reply Email (Accept, Tentative, Decline)
+    # 2. Handle Decline (Remove existing event if present)
+    if choice == 'd':
+        if existing_events:
+            for cal_name, fpath, ev_sum in existing_events:
+                remove_event_file(cal_name, fpath, ev_sum)
+            tty_print(f"{YELLOW}-> Removed event from '{target_cal}' calendar.{RESET}")
+        else:
+            tty_print(f"-> Event marked as declined.")
+
+    # 3. Handle Reply Email (Accept, Tentative, Decline)
     if partstat and organizer:
         tty_print(f"-> Sending {partstat} response to {organizer}...")
 
@@ -262,14 +536,18 @@ def main():
         stdout, stderr = proc.communicate(input=raw_reply_bytes)
 
         if proc.returncode == 0:
-            tty_print(f"-> Response sent successfully ({partstat})!")
+            tty_print(f"{GREEN}-> Response sent successfully ({partstat})!{RESET}")
             log(f"Response {partstat} for '{summary}' sent to {organizer}")
+            icon = "" if partstat in ["ACCEPTED", "TENTATIVE"] else ""
+            notify("NeoMutt Calendar", f"{icon} Event {partstat.lower()} & synced: {summary}")
         else:
             err_msg = stderr.decode('utf-8', errors='ignore').strip()
-            tty_print(f"[!] Error sending reply: {err_msg}")
+            tty_print(f"{RED}[!] Error sending reply: {err_msg}{RESET}")
             log(f"Failed to send {partstat} to {organizer}: {err_msg}")
+    elif choice == 'i':
+        notify("NeoMutt Calendar", f" Event imported & synced: {summary}")
 
-    tty_print("Finished. Press Enter to return to NeoMutt.")
+    tty_print("\nFinished. Press Enter to return to NeoMutt.")
     tty_in.readline()
 
 if __name__ == '__main__':

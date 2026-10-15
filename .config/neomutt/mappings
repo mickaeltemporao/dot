@@ -7,8 +7,8 @@ macro pager \cb "<pipe-message>urlscan<enter>" "Extract and follow URLs"
 # Open HTML part in Web Browser
 macro index,pager H "<pipe-message>~/.config/neomutt/open_browser.py --html<enter>" "Open HTML part in Web Browser"
 
-# Add Calendar Invite (.ics) to Google Calendar in Web Browser
-macro index,pager I "<pipe-message>~/.config/neomutt/open_browser.py --gcal<enter>" "Add invite to Google Calendar"
+# Calendar Invite & Cancellation Handler (Interactive Accept/Decline/Reschedule/Cancel & CalDAV Sync)
+macro index,pager I "<pipe-message>~/.config/neomutt/ics-to-khal<enter>" "Manage calendar invite (Accept/Decline/Sync)"
 
 # sidebar mappings
 bind index,pager \Ck sidebar-prev
