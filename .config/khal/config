@@ -19,4 +19,4 @@ longdatetimeformat = %d/%m/%Y %H:%M
 firstweekday = 0
 
 [default]
-default_calendar = work
+default_calendar = personal
