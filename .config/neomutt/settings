@@ -57,6 +57,7 @@ set auto_tag = yes
 # HTML / Mailcap Configuration
 # ----------------------------------------------------
 set mailcap_path = ~/.config/neomutt/mailcap
+set allow_ansi = yes        # Render ANSI color and bold codes emitted by elinks/mailcap
 auto_view text/html text/calendar
 alternative_order text/calendar text/html text/plain
 

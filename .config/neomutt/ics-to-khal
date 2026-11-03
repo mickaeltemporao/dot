@@ -56,17 +56,28 @@ def open_url(url):
         log(f"Failed to open URL {url}: {e}")
 
 def trigger_vdirsyncer_sync():
-    """Trigger background Google Calendar sync. Detached so NeoMutt never hangs."""
+    """Trigger Google Calendar sync in background worker, logging status and errors."""
     try:
-        subprocess.Popen(
+        env = os.environ.copy()
+        env["PATH"] = f"/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:{env.get('PATH', '')}"
+        res = subprocess.run(
             ["vdirsyncer", "sync", "personal_calendar"],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            start_new_session=True
+            capture_output=True,
+            text=True,
+            timeout=30,
+            env=env
         )
-        log("Triggered background vdirsyncer sync for Google Calendar")
+        if res.returncode == 0:
+            log("Worker: Google Calendar sync completed successfully.")
+        else:
+            err = (res.stderr or res.stdout).strip().splitlines()
+            err_summary = err[-1] if err else f"exit code {res.returncode}"
+            log(f"Worker ERROR: Google Calendar sync failed ({err_summary})")
+            notify("NeoMutt Calendar ERROR", f"Google Calendar sync failed: {err_summary[:40]}")
+    except subprocess.TimeoutExpired:
+        log("Worker ERROR: Google Calendar sync timed out after 30s.")
     except Exception as e:
-        log(f"Failed to trigger vdirsyncer sync: {e}")
+        log(f"Worker ERROR: Failed to execute vdirsyncer sync: {e}")
 
 def sanitize_header(val):
     """Strip newlines, linefeeds, and tabs to prevent email header injection/ValueErrors."""

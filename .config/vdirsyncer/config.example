@@ -31,6 +31,7 @@ a = "personal_local"
 b = "personal_remote"
 collections = [["personal", "personal", "your.email@gmail.com"]]
 metadata = ["color", "displayname"]
+conflict_resolution = "a wins"
 
 [storage personal_local]
 type = "filesystem"

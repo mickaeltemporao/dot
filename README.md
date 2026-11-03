@@ -76,6 +76,7 @@ Workstation keybindings follow a clear ergonomic hierarchy: `Alt` manages the wi
 | `Prefix + h` | Window | Split pane vertically (`-v`, stacked) |
 | `Prefix + c` | Session | Create new window |
 | `Prefix + Ctrl-h` / `Ctrl-l` | Session | Cycle previous / next window |
+| `Prefix + u` | Window | Follow URLs visible on screen via fzf popup (cross-platform) |
 | `Prefix + r` | Session | Reload `~/.config/tmux/tmux.conf` |
 
 ### Email Client (`neomutt`)

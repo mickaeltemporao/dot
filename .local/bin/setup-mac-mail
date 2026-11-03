@@ -23,7 +23,7 @@ BREW_PREFIX="$(brew --prefix)"
 
 # 2. Install required CLI utilities via Homebrew
 echo "[+] Installing mail packages via Homebrew..."
-brew install neomutt isync msmtp khal khard vdirsyncer pass gnupg w3m coreutils pinentry-mac davmail urlscan
+brew install neomutt isync msmtp khal khard vdirsyncer pass gnupg felinks w3m coreutils pinentry-mac davmail urlscan
 
 # 3. Configure GPG Agent with pinentry-mac for macOS Keychain integration
 echo "[+] Configuring GnuPG Agent with pinentry-mac..."

@@ -1,8 +1,10 @@
-# HTML (Interactive: opens in browser)
+# HTML (Inline: renders colors, bold, and formatting with elinks; falls back to w3m if elinks not installed)
+text/html; elinks -dump -dump-color-mode 3 -default-mime-type text/html %s; test=command -v elinks >/dev/null 2>&1; copiousoutput
+text/html; w3m -I %{charset} -T text/html -dump -cols 300 -o display_link_number=1 %s; copiousoutput
+
+# HTML (Interactive fallback: opens in browser)
 text/html; open %s; test=test "$(uname)" = "Darwin"; nametemplate=%s.html
 text/html; xdg-open %s; test=test -n "$DISPLAY"; nametemplate=%s.html
-# HTML (Inline: renders in NeoMutt pager automatically)
-text/html; w3m -I %{charset} -T text/html -dump %s; copiousoutput
 
 # Calendar Invites (.ics)
 text/calendar; mutt-ics %s; copiousoutput
