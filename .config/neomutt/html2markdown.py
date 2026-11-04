@@ -2,7 +2,8 @@
 """
 html2markdown.py: High-fidelity HTML-to-Markdown email renderer for NeoMutt.
 Preserves French accents, handles varied encodings (UTF-8, ISO-8859-1, Windows-1252),
-cleans HTML tables into aligned ASCII, and ensures URLs stay unbroken on single lines.
+cleans HTML tables into aligned ASCII, guards against malformed table crashes,
+and ensures URLs stay unbroken on single lines.
 """
 
 import sys
@@ -12,6 +13,17 @@ import codecs
 
 try:
     import html2text
+    import html2text.utils
+
+    # Guard against upstream html2text bug: empty/malformed table buffers crash reformat_table with IndexError
+    _orig_reformat_table = html2text.utils.reformat_table
+
+    def _safe_reformat_table(lines, right_margin):
+        if not lines:
+            return []
+        return _orig_reformat_table(lines, right_margin)
+
+    html2text.utils.reformat_table = _safe_reformat_table
 except ImportError:
     # If html2text is missing, exit 1 to trigger mailcap fallback (e.g. w3m)
     sys.exit(1)
@@ -92,7 +104,16 @@ def main():
     h.images_to_alt = True          # Display [alt text] rather than giant image URLs
     h.backquote_code_style = True   # Code blocks using ```
 
-    rendered_markdown = h.handle(decoded_html)
+    try:
+        rendered_markdown = h.handle(decoded_html)
+    except Exception:
+        # If table padding or any parser feature fails on malformed HTML, retry without table padding
+        h.pad_tables = False
+        try:
+            rendered_markdown = h.handle(decoded_html)
+        except Exception:
+            # Fallback: simple text extraction so NeoMutt never crashes
+            rendered_markdown = re.sub(r"<[^>]+>", " ", decoded_html)
 
     # Output strictly UTF-8 bytes to stdout
     sys.stdout.buffer.write(rendered_markdown.encode("utf-8", errors="replace"))
