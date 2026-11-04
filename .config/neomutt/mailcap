@@ -1,6 +1,5 @@
-# HTML (Inline: renders colors, bold, and formatting with elinks; falls back to w3m if elinks not installed)
-text/html; elinks -dump -dump-color-mode 3 -default-mime-type text/html %s; test=command -v elinks >/dev/null 2>&1; copiousoutput
-text/html; w3m -I %{charset} -T text/html -dump -cols 300 -o display_link_number=1 %s; copiousoutput
+# HTML (Inline: renders cleanly in NeoMutt pager with w3m)
+text/html; w3m -I %{charset} -T text/html -dump -cols 300 %s; copiousoutput
 
 # HTML (Interactive fallback: opens in browser)
 text/html; open %s; test=test "$(uname)" = "Darwin"; nametemplate=%s.html
