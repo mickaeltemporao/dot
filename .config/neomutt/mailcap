@@ -1,4 +1,5 @@
-# HTML (Inline: renders cleanly in NeoMutt pager with w3m)
+# HTML (Inline: renders clean Markdown with bold/italics via html2text; falls back to w3m)
+text/html; python3 -m html2text --body-width=0 --unicode-snob --dash-unordered-list --pad-tables --no-wrap-links --images-to-alt --backquote-code-style --decode-errors=ignore %s; test=python3 -c "import html2text" >/dev/null 2>&1; copiousoutput
 text/html; w3m -I %{charset} -T text/html -dump -cols 300 %s; copiousoutput
 
 # HTML (Interactive fallback: opens in browser)

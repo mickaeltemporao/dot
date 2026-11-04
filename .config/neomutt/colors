@@ -43,6 +43,15 @@ color quoted1       color248 default
 color quoted2       color240 default
 color signature     color240 default
 
-# Regex Highlights in Body
-color body          color220 default "[\-\.+_a-zA-Z0-9]+@[\-\.a-zA-Z0-9]+" # Emails
-color body          color220 default "(https?|ftp)://[\-\.,/%~_:?&=\#a-zA-Z0-9]+" # URLs
+# Regex & Markdown Highlights in Body
+color body          brightcolor220 default "^#+[[:space:]].*"                                       # Headings (# Header)
+color body          brightcolor220 default "(^|[[:space:]])\*\*[^*]+\*\*([[:space:]]|[[:punct:]]|$)" # **bold**
+color body          color114       default "(^|[[:space:]])_[^_]+_([[:space:]]|[[:punct:]]|$)"     # _italic_
+color body          color248       default "\`[^\`]+\`"                                             # `code`
+color body          brightcolor220 default "^[[:space:]]*[-*][[:space:]]"                          # List bullets (* or -)
+color body          color240       default "^[[:space:]]*[-*_]{3,}[[:space:]]*$"                    # Horizontal rules (---)
+color body          color240       default "^[[:space:]]*\|[-| ]+\|[[:space:]]*$"                   # Markdown table dividers
+color body          color220       default "\[[^]]+\]\((https?|ftp)://[^)]+\)"                     # Markdown links [title](url)
+color body          color220       default "<(https?|ftp)://[^>]+>"                                # <url>
+color body          color220       default "(https?|ftp)://[\-\.,/%~_:?&=\#a-zA-Z0-9]+"           # Raw URLs
+color body          color220       default "[\-\.+_a-zA-Z0-9]+@[\-\.a-zA-Z0-9]+"                   # Emails

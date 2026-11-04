@@ -44,9 +44,9 @@ if [ -d "$HOME/.config/passwords" ] && [ ! -L "$HOME/.password-store" ]; then
     ln -s "$HOME/.config/passwords" "$HOME/.password-store"
 fi
 
-# 4. Install Python dependencies for calendar & smart delivery helpers
+# 4. Install Python dependencies for calendar, smart delivery & Markdown email rendering
 echo "[+] Installing Python dependencies..."
-python3 -m pip install --quiet --upgrade icalendar python-dateutil mutt-ics || true
+python3 -m pip install --quiet --upgrade icalendar python-dateutil mutt-ics html2text || true
 
 # 5. Setup xdg-open shim so attachment openers work natively on macOS
 if [ ! -f "$BREW_PREFIX/bin/xdg-open" ]; then

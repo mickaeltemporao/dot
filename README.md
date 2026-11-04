@@ -137,7 +137,7 @@ dot config --local status.showUntrackedFiles no
 sudo pacman -S --needed \
   bash bash-completion git neovim tmux vifm zathura zathura-pdf-mupdf \
   dunst xwallpaper unclutter udiskie xcompmgr fzf pyenv pass gnupg \
-  neomutt msmtp isync khal khard vdirsyncer pamixer bat
+  neomutt msmtp isync khal khard vdirsyncer pamixer bat python-html2text
 
 # Suckless builds (dwm, st, slstatus):
 # Recompile from your custom build sources (e.g. ~/Templates/{dwm,st,slstatus})
@@ -151,11 +151,11 @@ The modular Bash, Neovim, tmux, vifm, and PIM configurations adhere strictly to 
 ```bash
 # Debian / Ubuntu:
 sudo apt update && sudo apt install -y \
-  bash git neovim tmux vifm zathura dunst fzf pass gnupg neomutt msmtp isync khal khard vdirsyncer
+  bash git neovim tmux vifm zathura dunst fzf pass gnupg neomutt msmtp isync khal khard vdirsyncer python3-html2text
 
 # Fedora:
 sudo dnf install -y \
-  bash git neovim tmux vifm zathura dunst fzf pass gnupg neomutt msmtp isync khal khard vdirsyncer
+  bash git neovim tmux vifm zathura dunst fzf pass gnupg neomutt msmtp isync khal khard vdirsyncer python3-html2text
 ```
 
 #### Option C: macOS (Darwin)
