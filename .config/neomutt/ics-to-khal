@@ -85,14 +85,68 @@ def sanitize_header(val):
         return ""
     return re.sub(r'[\r\n\t]+', ' ', str(val)).strip()
 
+WINDOWS_TO_IANA_TZ = {
+    "Romance Standard Time": "Europe/Paris",
+    "W. Europe Standard Time": "Europe/Berlin",
+    "Central Europe Standard Time": "Europe/Warsaw",
+    "Central European Standard Time": "Europe/Warsaw",
+    "GMT Standard Time": "Europe/London",
+    "Greenwich Standard Time": "Atlantic/Reykjavik",
+    "W. Central Africa Standard Time": "Africa/Lagos",
+    "FLE Standard Time": "Europe/Helsinki",
+    "GTB Standard Time": "Europe/Bucharest",
+    "E. Europe Standard Time": "Europe/Chisinau",
+    "Israel Standard Time": "Asia/Jerusalem",
+    "Arabic Standard Time": "Asia/Baghdad",
+    "Arab Standard Time": "Asia/Riyadh",
+    "Russian Standard Time": "Europe/Moscow",
+    "Eastern Standard Time": "America/New_York",
+    "Central Standard Time": "America/Chicago",
+    "Mountain Standard Time": "America/Denver",
+    "Pacific Standard Time": "America/Los_Angeles",
+    "Alaskan Standard Time": "America/Anchorage",
+    "Hawaiian Standard Time": "Pacific/Honolulu",
+    "US Eastern Standard Time": "America/Indianapolis",
+}
+
+def normalize_ics_content(ics_bytes):
+    """Normalize proprietary Windows timezone identifiers to standard IANA timezone identifiers."""
+    if not ics_bytes:
+        return ics_bytes
+    try:
+        text = ics_bytes.decode('utf-8', errors='ignore')
+        for win_tz, iana_tz in WINDOWS_TO_IANA_TZ.items():
+            if win_tz in text:
+                text = re.sub(rf'(?i);TZID="?{re.escape(win_tz)}"?', f';TZID={iana_tz}', text)
+                text = re.sub(rf'(?i)TZID:{re.escape(win_tz)}', f'TZID:{iana_tz}', text)
+        return text.encode('utf-8')
+    except Exception:
+        return ics_bytes
+
 def format_cal_datetime(dt_val):
     if dt_val is None:
         return "N/A"
     dt = dt_val.dt if hasattr(dt_val, 'dt') else dt_val
     if isinstance(dt, datetime.datetime):
-        tz_name = dt.strftime("%Z").strip()
-        tz_str = f" {tz_name}" if tz_name else ""
-        return dt.strftime("%A, %d %B %Y at %H:%M") + tz_str
+        try:
+            import zoneinfo
+            local_tz = zoneinfo.ZoneInfo("Europe/Paris")
+        except Exception:
+            local_tz = None
+
+        if dt.tzinfo and local_tz:
+            orig_tz = dt.strftime("%Z").strip() or str(dt.tzinfo)
+            local_dt = dt.astimezone(local_tz)
+            local_str = local_dt.strftime("%A, %d %B %Y at %H:%M %Z").strip()
+            # If the original time was specified in UTC or another foreign timezone, note it
+            if orig_tz and orig_tz not in ("CET", "CEST", "Europe/Paris", "Romance Standard Time"):
+                orig_str = dt.strftime("%H:%M %Z").strip()
+                return f"{local_str} ({orig_str})"
+            return local_str
+        else:
+            tz_name = dt.strftime("%Z").strip()
+            tz_str = f" {tz_name}" if tz_name else ""
+            return dt.strftime("%A, %d %B %Y at %H:%M") + tz_str
     elif isinstance(dt, datetime.date):
         return dt.strftime("%A, %d %B %Y (All day)")
     return str(dt)
@@ -225,6 +279,7 @@ def run_worker(choice, user_email, tmp_eml_path):
         if not ics_content:
             log("Worker: No ics content found")
             return
+        ics_content = normalize_ics_content(ics_content)
 
         cal = icalendar.Calendar.from_ical(ics_content)
         event = None
@@ -259,6 +314,10 @@ def run_worker(choice, user_email, tmp_eml_path):
 
         # 2. Action: Import / Update
         if choice in ['a', 't', 'i']:
+            existing = find_events_by_uid(uid)
+            for fpath, ev_sum in existing:
+                remove_event_file(fpath, ev_sum)
+
             with tempfile.NamedTemporaryFile(suffix='.ics', delete=False) as f:
                 f.write(ics_content)
                 ics_path = f.name
@@ -394,6 +453,8 @@ def main():
         print("\n[!] No calendar invite (.ics) found in this email.")
         notify("NeoMutt Calendar", "No .ics calendar invite found in this email.")
         sys.exit(1)
+
+    ics_content = normalize_ics_content(ics_content)
 
     try:
         cal = icalendar.Calendar.from_ical(ics_content)
