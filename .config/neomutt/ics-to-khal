@@ -526,110 +526,124 @@ def main():
         tty_out.write(s + "\n")
         tty_out.flush()
 
-    # ========================================================
-    # FLOW 1: CANCELLATION NOTICE
-    # ========================================================
-    if is_cancelled:
-        tty_print("")
-        tty_print(f"{RED}{'=' * 64}{RESET}")
-        tty_print(f"  {RED}{BOLD}EVENT CANCELLATION NOTICE: {summary}{RESET}")
-        tty_print(f"{RED}{'=' * 64}{RESET}")
-        tty_print(f"{BOLD}Organizer : {RESET}{organizer_name + ' <' + organizer + '>' if organizer_name else (organizer or 'Unknown')}")
-        tty_print(f"{BOLD}Start     : {RESET}{format_cal_datetime(dtstart)}")
-        tty_print(f"{BOLD}End       : {RESET}{format_cal_datetime(dtend)}")
-        if location:
-            tty_print(f"{BOLD}Location  : {RESET}{location}")
-        tty_print(f"{BOLD}Status    : {RESET}{RED}CANCELLED by organizer{RESET}")
+    # Use Alternate Screen Buffer for the interactive prompt so zero invite text
+    # leaks into the terminal scrollback or lingers when NeoMutt exits.
+    if is_interactive:
+        tty_out.write("\033[?1049h\033[H\033[2J")
+        tty_out.flush()
 
-        if existing_events:
-            tty_print(f"{BOLD}Calendar  : {RESET}{YELLOW}Found in Google Calendar{RESET}")
-            tty_print(f"{'-' * 64}")
-            tty_print("Action:")
-            tty_print(f"  {GREEN}[r] Remove from Google Calendar{RESET} (Recommended)")
-            tty_print("  [o] Open Google Calendar in browser")
-            tty_print("  [q] Keep event / Quit without changes")
-            tty_print(f"{'-' * 64}")
+    choice = 'q'
+    try:
+        # ========================================================
+        # FLOW 1: CANCELLATION NOTICE
+        # ========================================================
+        if is_cancelled:
+            tty_print("")
+            tty_print(f"{RED}{'=' * 64}{RESET}")
+            tty_print(f"  {RED}{BOLD}EVENT CANCELLATION NOTICE: {summary}{RESET}")
+            tty_print(f"{RED}{'=' * 64}{RESET}")
+            tty_print(f"{BOLD}Organizer : {RESET}{organizer_name + ' <' + organizer + '>' if organizer_name else (organizer or 'Unknown')}")
+            tty_print(f"{BOLD}Start     : {RESET}{format_cal_datetime(dtstart)}")
+            tty_print(f"{BOLD}End       : {RESET}{format_cal_datetime(dtend)}")
+            if location:
+                tty_print(f"{BOLD}Location  : {RESET}{location}")
+            tty_print(f"{BOLD}Status    : {RESET}{RED}CANCELLED by organizer{RESET}")
 
-            while True:
-                tty_out.write(f"Select [{GREEN}r{RESET}/o/q] (default 'r'): ")
-                tty_out.flush()
-                ch = get_single_key(tty_in)
-                if ch in ['\n', 'r', '']:
-                    choice = 'r'
-                    break
-                elif ch == 'o':
-                    query_url = "https://calendar.google.com/calendar/r/search?q=" + urllib.parse.quote(summary)
-                    open_url(query_url)
-                    tty_print("\n-> Opened Google Calendar search in browser.")
-                    continue
-                elif ch == 'q':
-                    sys.exit(0)
+            if existing_events:
+                tty_print(f"{BOLD}Calendar  : {RESET}{YELLOW}Found in Google Calendar{RESET}")
+                tty_print(f"{'-' * 64}")
+                tty_print("Action:")
+                tty_print(f"  {GREEN}[r] Remove from Google Calendar{RESET} (Recommended)")
+                tty_print("  [o] Open Google Calendar in browser")
+                tty_print("  [q] Keep event / Quit without changes")
+                tty_print(f"{'-' * 64}")
+
+                while True:
+                    tty_out.write(f"Select [{GREEN}r{RESET}/o/q] (default 'r'): ")
+                    tty_out.flush()
+                    ch = get_single_key(tty_in)
+                    if ch in ['\n', 'r', '']:
+                        choice = 'r'
+                        break
+                    elif ch == 'o':
+                        query_url = "https://calendar.google.com/calendar/r/search?q=" + urllib.parse.quote(summary)
+                        open_url(query_url)
+                        tty_print("\n-> Opened Google Calendar search in browser.")
+                        continue
+                    elif ch == 'q':
+                        choice = 'q'
+                        break
+            else:
+                tty_print(f"{'-' * 64}")
+                tty_print(f"{YELLOW}Note: This cancelled event was not found in your Google Calendar (nothing to delete).{RESET}")
+                tty_print("  [o] Search for it on Google Calendar in browser")
+                tty_print("  [q] Return to NeoMutt")
+                tty_print(f"{'-' * 64}")
+                while True:
+                    tty_out.write("Select [o/q] (default 'q'): ")
+                    tty_out.flush()
+                    ch = get_single_key(tty_in)
+                    if ch == 'o':
+                        query_url = "https://calendar.google.com/calendar/r/search?q=" + urllib.parse.quote(summary)
+                        open_url(query_url)
+                        continue
+                    else:
+                        choice = 'q'
+                        break
+
+        # ========================================================
+        # FLOW 2: INVITE OR RESCHEDULE / UPDATE
+        # ========================================================
         else:
+            tty_print("")
+            banner_color = CYAN if is_reschedule else BOLD
+            tty_print(f"{banner_color}{'=' * 64}{RESET}")
+            if is_reschedule:
+                tty_print(f"  {CYAN}{BOLD}CALENDAR UPDATE / RESCHEDULE: {summary}{RESET}")
+            else:
+                tty_print(f"  {BOLD}CALENDAR INVITE: {summary}{RESET}")
+            tty_print(f"{banner_color}{'=' * 64}{RESET}")
+            tty_print(f"{BOLD}Organizer : {RESET}{organizer_name + ' <' + organizer + '>' if organizer_name else (organizer or 'N/A')}")
+            tty_print(f"{BOLD}Start     : {RESET}{format_cal_datetime(dtstart)}")
+            tty_print(f"{BOLD}End       : {RESET}{format_cal_datetime(dtend)}")
+            if location:
+                tty_print(f"{BOLD}Location  : {RESET}{location}")
+            if description:
+                desc_lines = [l for l in description.splitlines() if l.strip()]
+                desc_preview = "\n            ".join(desc_lines[:3])
+                if desc_preview:
+                    tty_print(f"{BOLD}Details   : {RESET}{desc_preview}")
+
+            tty_print(f"{BOLD}Calendar  : {RESET}{GREEN}{CAL_LABEL}{RESET}")
+            if is_reschedule:
+                tty_print(f"{YELLOW}Notice    : [~] Existing event found! Accepting/importing will update it in place without duplicates.{RESET}")
             tty_print(f"{'-' * 64}")
-            tty_print(f"{YELLOW}Note: This cancelled event was not found in your Google Calendar (nothing to delete).{RESET}")
-            tty_print("  [o] Search for it on Google Calendar in browser")
-            tty_print("  [q] Return to NeoMutt")
+            tty_print("Choose an action:")
+            action_verb = "Update" if is_reschedule else "Add to"
+            tty_print(f"  {GREEN}[a] Accept{RESET}           ({action_verb} Google Calendar & send Accept reply)")
+            tty_print(f"  {YELLOW}[t] Tentative / Maybe{RESET}({action_verb} Google Calendar & send Tentative reply)")
+            tty_print(f"  {RED}[d] Decline{RESET}          (Remove from Google Calendar & send Decline reply)")
+            tty_print(f"  [i] Import only      ({action_verb} Google Calendar without sending reply)")
+            tty_print("  [o] Open Google Calendar in browser")
+            tty_print("  [q] Cancel / Quit")
             tty_print(f"{'-' * 64}")
+
             while True:
-                tty_out.write("Select [o/q] (default 'q'): ")
+                tty_out.write("Select [a/t/d/i/o/q]: ")
                 tty_out.flush()
                 ch = get_single_key(tty_in)
                 if ch == 'o':
                     query_url = "https://calendar.google.com/calendar/r/search?q=" + urllib.parse.quote(summary)
                     open_url(query_url)
+                    tty_print("\n-> Opened Google Calendar search in browser.")
                     continue
-                else:
-                    sys.exit(0)
-
-    # ========================================================
-    # FLOW 2: INVITE OR RESCHEDULE / UPDATE
-    # ========================================================
-    else:
-        tty_print("")
-        banner_color = CYAN if is_reschedule else BOLD
-        tty_print(f"{banner_color}{'=' * 64}{RESET}")
-        if is_reschedule:
-            tty_print(f"  {CYAN}{BOLD}CALENDAR UPDATE / RESCHEDULE: {summary}{RESET}")
-        else:
-            tty_print(f"  {BOLD}CALENDAR INVITE: {summary}{RESET}")
-        tty_print(f"{banner_color}{'=' * 64}{RESET}")
-        tty_print(f"{BOLD}Organizer : {RESET}{organizer_name + ' <' + organizer + '>' if organizer_name else (organizer or 'N/A')}")
-        tty_print(f"{BOLD}Start     : {RESET}{format_cal_datetime(dtstart)}")
-        tty_print(f"{BOLD}End       : {RESET}{format_cal_datetime(dtend)}")
-        if location:
-            tty_print(f"{BOLD}Location  : {RESET}{location}")
-        if description:
-            desc_lines = [l for l in description.splitlines() if l.strip()]
-            desc_preview = "\n            ".join(desc_lines[:3])
-            if desc_preview:
-                tty_print(f"{BOLD}Details   : {RESET}{desc_preview}")
-
-        tty_print(f"{BOLD}Calendar  : {RESET}{GREEN}{CAL_LABEL}{RESET}")
-        if is_reschedule:
-            tty_print(f"{YELLOW}Notice    : [~] Existing event found! Accepting/importing will update it in place without duplicates.{RESET}")
-        tty_print(f"{'-' * 64}")
-        tty_print("Choose an action:")
-        action_verb = "Update" if is_reschedule else "Add to"
-        tty_print(f"  {GREEN}[a] Accept{RESET}           ({action_verb} Google Calendar & send Accept reply)")
-        tty_print(f"  {YELLOW}[t] Tentative / Maybe{RESET}({action_verb} Google Calendar & send Tentative reply)")
-        tty_print(f"  {RED}[d] Decline{RESET}          (Remove from Google Calendar & send Decline reply)")
-        tty_print(f"  [i] Import only      ({action_verb} Google Calendar without sending reply)")
-        tty_print("  [o] Open Google Calendar in browser")
-        tty_print("  [q] Cancel / Quit")
-        tty_print(f"{'-' * 64}")
-
-        while True:
-            tty_out.write("Select [a/t/d/i/o/q]: ")
+                elif ch in ['a', 't', 'd', 'i', 'q']:
+                    choice = ch
+                    break
+    finally:
+        if is_interactive:
+            tty_out.write("\033[?1049l")
             tty_out.flush()
-            ch = get_single_key(tty_in)
-            if ch == 'o':
-                query_url = "https://calendar.google.com/calendar/r/search?q=" + urllib.parse.quote(summary)
-                open_url(query_url)
-                tty_print("\n-> Opened Google Calendar search in browser.")
-                continue
-            elif ch in ['a', 't', 'd', 'i', 'q']:
-                choice = ch
-                break
 
     if choice == 'q':
         sys.exit(0)
