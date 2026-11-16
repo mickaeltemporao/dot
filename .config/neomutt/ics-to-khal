@@ -21,13 +21,29 @@ from email.message import EmailMessage
 import tempfile
 import subprocess
 import datetime
+import fcntl
 import urllib.parse
 import icalendar
 
 LOG_FILE = os.path.expanduser("~/.config/neomutt/schedule.log")
 CALENDARS_DIR = os.path.expanduser("~/.local/share/calendars")
 TARGET_CAL = "personal"
+TARGET_CAL_DIR = os.path.join(CALENDARS_DIR, TARGET_CAL)
 CAL_LABEL = "Google Calendar"
+GCAL_OWNER_EMAIL = "mickael.temporao@gmail.com"
+USER_EMAILS = {
+    GCAL_OWNER_EMAIL,
+    "m.temporao@sciencespobordeaux.fr",
+    "m.temporao@scpobx.fr",
+}
+
+def build_tool_env():
+    """Build cross-platform environment with user binaries and password store path."""
+    env = os.environ.copy()
+    local_bin = os.path.expanduser("~/.local/bin")
+    env["PATH"] = f"{local_bin}:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:{env.get('PATH', '')}"
+    env["PASSWORD_STORE_DIR"] = env.get("PASSWORD_STORE_DIR", os.path.expanduser("~/.config/passwords"))
+    return env
 
 def log(msg):
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -58,14 +74,12 @@ def open_url(url):
 def trigger_vdirsyncer_sync():
     """Trigger Google Calendar sync in background worker, logging status and errors."""
     try:
-        env = os.environ.copy()
-        env["PATH"] = f"/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:{env.get('PATH', '')}"
         res = subprocess.run(
             ["vdirsyncer", "sync", "personal_calendar"],
             capture_output=True,
             text=True,
             timeout=30,
-            env=env
+            env=build_tool_env()
         )
         if res.returncode == 0:
             log("Worker: Google Calendar sync completed successfully.")
@@ -183,15 +197,15 @@ def extract_ics(raw_bytes, msg=None):
     return ics_content, part_method
 
 def find_events_by_uid(uid):
-    """Search local calendar storage for .ics files containing UID:<uid>."""
+    """Search target local calendar storage for .ics files containing UID:<uid>."""
     if not uid:
         return []
     clean_uid = uid.strip()
     results = []
-    if not os.path.isdir(CALENDARS_DIR):
+    if not os.path.isdir(TARGET_CAL_DIR):
         return results
 
-    for root, dirs, files in os.walk(CALENDARS_DIR):
+    for root, dirs, files in os.walk(TARGET_CAL_DIR):
         for fname in files:
             if not fname.endswith(".ics"):
                 continue
@@ -232,6 +246,46 @@ def detect_user_email(msg, event=None):
                     return "m.temporao@sciencespobordeaux.fr"
 
     return "mickael.temporao@gmail.com"
+
+def apply_rsvp_to_calendar(ics_bytes, partstat, strip_method=False):
+    """Set PARTSTAT for the user's addresses and Google Calendar owner in VEVENT."""
+    cal = icalendar.Calendar.from_ical(ics_bytes)
+    if strip_method and 'METHOD' in cal:
+        del cal['METHOD']
+
+    if partstat:
+        now_utc = datetime.datetime.now(datetime.timezone.utc)
+        for comp in cal.walk('VEVENT'):
+            raw_att = comp.get('attendee')
+            attendees = list(raw_att) if isinstance(raw_att, list) else ([raw_att] if raw_att is not None else [])
+            has_gcal_owner = False
+            for att in attendees:
+                att_email = clean_email(str(att)).lower()
+                if att_email in USER_EMAILS:
+                    att.params['PARTSTAT'] = icalendar.vText(partstat)
+                    att.params.pop('RSVP', None)
+                if att_email == GCAL_OWNER_EMAIL:
+                    has_gcal_owner = True
+
+            if not has_gcal_owner:
+                owner_att = icalendar.vCalAddress(f"mailto:{GCAL_OWNER_EMAIL}")
+                owner_att.params['CUTYPE'] = icalendar.vText('INDIVIDUAL')
+                owner_att.params['ROLE'] = icalendar.vText('REQ-PARTICIPANT')
+                owner_att.params['PARTSTAT'] = icalendar.vText(partstat)
+                owner_att.params['CN'] = icalendar.vText(GCAL_OWNER_EMAIL)
+                attendees.append(owner_att)
+
+            if 'attendee' in comp:
+                del comp['attendee']
+            for att in attendees:
+                comp.add('attendee', att)
+
+            if 'dtstamp' in comp:
+                del comp['dtstamp']
+            comp.add('dtstamp', now_utc)
+
+    return cal.to_ical()
+
 
 def remove_event_file(fpath, summary=""):
     try:
@@ -301,52 +355,60 @@ def run_worker(choice, user_email, tmp_eml_path):
             organizer_name = sanitize_header(str(event.get('organizer').params.get('cn', '')))
 
         user_name = "Mickael Temporão"
+        partstat = {"a": "ACCEPTED", "t": "TENTATIVE", "d": "DECLINED"}.get(choice)
 
-        # 1. Action: Remove / Cancel / Decline
-        if choice in ['r', 'd']:
-            existing = find_events_by_uid(uid)
-            for fpath, ev_sum in existing:
-                remove_event_file(fpath, ev_sum)
-            trigger_vdirsyncer_sync()
-            if choice == 'r':
-                log(f"Worker: Removed cancelled event '{summary}' (UID: {uid})")
-                notify("NeoMutt Calendar", f" Cancelled event removed: {summary}")
+        lock_path = os.path.join(tempfile.gettempdir(), f"ics-to-khal-{os.getuid()}.lock")
+        with open(lock_path, "w") as lock_fp:
+            fcntl.flock(lock_fp, fcntl.LOCK_EX)
 
-        # 2. Action: Import / Update
-        if choice in ['a', 't', 'i']:
-            existing = find_events_by_uid(uid)
-            for fpath, ev_sum in existing:
-                remove_event_file(fpath, ev_sum)
+            # 1. Action: Remove / Cancel / Decline
+            if choice in ['r', 'd']:
+                existing = find_events_by_uid(uid)
+                for fpath, ev_sum in existing:
+                    remove_event_file(fpath, ev_sum)
+                trigger_vdirsyncer_sync()
+                if choice == 'r':
+                    log(f"Worker: Removed cancelled event '{summary}' (UID: {uid})")
+                    notify("NeoMutt Calendar", f" Cancelled event removed: {summary}")
 
-            with tempfile.NamedTemporaryFile(suffix='.ics', delete=False) as f:
-                f.write(ics_content)
-                ics_path = f.name
-            try:
-                res = subprocess.run(
-                    ['khal', 'import', '--batch', '-a', TARGET_CAL, ics_path],
-                    capture_output=True,
-                    text=True
-                )
-                if res.returncode == 0:
-                    log(f"Worker: Successfully imported/updated '{summary}' (UID: {uid}) in '{TARGET_CAL}'")
+            # 2. Action: Import / Update (with PARTSTAT synced for Google Calendar)
+            if choice in ['a', 't', 'i']:
+                target_ics = apply_rsvp_to_calendar(ics_content, partstat, strip_method=False)
+                existing = find_events_by_uid(uid)
+
+                if existing:
+                    target_path = existing[0][0]
+                    for fpath, ev_sum in existing[1:]:
+                        remove_event_file(fpath, ev_sum)
+                    updated_ics = apply_rsvp_to_calendar(ics_content, partstat, strip_method=True)
+                    with open(target_path, 'wb') as f:
+                        f.write(updated_ics)
+                    os.chmod(target_path, 0o600)
+                    log(f"Worker: Updated '{summary}' (UID: {uid}, PARTSTAT={partstat or 'UNCHANGED'}) in '{TARGET_CAL}'")
                     trigger_vdirsyncer_sync()
                 else:
-                    err_msg = res.stderr.strip() or res.stdout.strip()
-                    log(f"Worker: khal import warning/error for '{summary}': {err_msg}")
-                    trigger_vdirsyncer_sync()
-            finally:
-                if os.path.exists(ics_path):
-                    os.remove(ics_path)
+                    with tempfile.NamedTemporaryFile(suffix='.ics', delete=False) as f:
+                        f.write(target_ics)
+                        ics_path = f.name
+                    try:
+                        res = subprocess.run(
+                            ['khal', 'import', '--batch', '-a', TARGET_CAL, ics_path],
+                            capture_output=True,
+                            text=True,
+                            env=build_tool_env()
+                        )
+                        if res.returncode == 0:
+                            log(f"Worker: Successfully imported '{summary}' (UID: {uid}, PARTSTAT={partstat or 'UNCHANGED'}) in '{TARGET_CAL}'")
+                            trigger_vdirsyncer_sync()
+                        else:
+                            err_msg = res.stderr.strip() or res.stdout.strip()
+                            log(f"Worker: khal import warning/error for '{summary}': {err_msg}")
+                            trigger_vdirsyncer_sync()
+                    finally:
+                        if os.path.exists(ics_path):
+                            os.remove(ics_path)
 
         # 3. Action: Send Reply Email
-        partstat = None
-        if choice == 'a':
-            partstat = "ACCEPTED"
-        elif choice == 't':
-            partstat = "TENTATIVE"
-        elif choice == 'd':
-            partstat = "DECLINED"
-
         if partstat and organizer:
             reply_cal = icalendar.Calendar()
             reply_cal.add('prodid', '-//NeoMutt Calendar Responder//EN')
@@ -402,16 +464,12 @@ def run_worker(choice, user_email, tmp_eml_path):
             raw_reply_bytes = reply_msg.as_bytes()
 
             sendmail_script = os.path.expanduser("~/.config/neomutt/smart_sendmail.py")
-            env = os.environ.copy()
-            env["PASSWORD_STORE_DIR"] = os.environ.get("PASSWORD_STORE_DIR", os.path.expanduser("~/.config/passwords"))
-            env["PATH"] = f"/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:{env.get('PATH', '')}"
-
             proc = subprocess.Popen(
                 [sys.executable, sendmail_script],
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                env=env
+                env=build_tool_env()
             )
             _, stderr = proc.communicate(input=raw_reply_bytes)
 
