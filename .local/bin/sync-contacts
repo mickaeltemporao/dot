@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Cross-platform PATH (macOS Homebrew + Arch Linux)
+if [ -d "/opt/homebrew/bin" ]; then
+    export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:$PATH"
+fi
+export PATH="$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
+
+CONTACTS_DIR="${CONTACTS_DIR:-$HOME/.local/share/contacts/contacts}"
+NOTIFY=false
+
+for arg in "$@"; do
+    case "$arg" in
+        --notify|-n) NOTIFY=true ;;
+    esac
+done
+
+notify_user() {
+    local title="$1"
+    local message="$2"
+    if [ "$NOTIFY" = true ] && { [ -n "${TMUX:-}" ] || tmux info >/dev/null 2>&1; }; then
+        tmux set -g @notification "${title}: ${message}" 2>/dev/null || true
+        tmux refresh-client -S 2>/dev/null || true
+        tmux run-shell -b 'sleep 5 && tmux set -gu @notification && tmux refresh-client -S' 2>/dev/null || true
+    fi
+}
+
+if [ ! -d "$CONTACTS_DIR/.git" ]; then
+    echo "Error: $CONTACTS_DIR is not a git repository." >&2
+    notify_user "NeoMutt Contacts ERROR" "Not a git repository"
+    exit 1
+fi
+
+cd "$CONTACTS_DIR"
+
+# Stage and commit local edits first so rebase never blocks on dirty worktree
+git add -A
+committed=false
+if ! git diff --staged --quiet; then
+    git commit -m "sync: contacts $(date +%Y-%m-%d)" >/dev/null
+    committed=true
+fi
+
+if ! git pull --rebase --quiet; then
+    echo "Error: git pull --rebase failed in $CONTACTS_DIR" >&2
+    notify_user "NeoMutt Contacts ERROR" "Pull/rebase conflict or network error"
+    exit 1
+fi
+
+if ! git push --quiet; then
+    echo "Error: git push failed in $CONTACTS_DIR" >&2
+    notify_user "NeoMutt Contacts ERROR" "Push failed (check network/SSH)"
+    exit 1
+fi
+
+if [ "$committed" = true ]; then
+    echo "Contacts synced (committed & pushed)."
+    notify_user "NeoMutt Contacts" "Synced & pushed updates"
+else
+    echo "Contacts synced (up to date)."
+    notify_user "NeoMutt Contacts" "Contacts up to date"
+fi
