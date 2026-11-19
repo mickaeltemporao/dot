@@ -197,6 +197,67 @@ vim.api.nvim_create_autocmd("BufWritePost", {
   end,
 })
 
+vim.api.nvim_create_autocmd("VimLeavePre", {
+  group = aug,
+  callback = function()
+    local had_pending = sync_timer ~= nil
+    if sync_timer then
+      sync_timer:stop()
+      sync_timer:close()
+      sync_timer = nil
+    end
+
+    -- Wait briefly if an async sync is mid-flight so .git/index.lock isn't left behind
+    if sync_running then
+      vim.wait(8000, function()
+        return not sync_running
+      end, 50)
+    end
+
+    if not had_pending or not vim.g.notes_autosync then
+      return
+    end
+
+    local root = norm(vim.env.ZK_NOTEBOOK_DIR)
+    if not root or not vim.uv.fs_stat(root .. "/.git") then
+      return
+    end
+    if vim.system({ "git", "remote", "get-url", "origin" }, { cwd = root }):wait().code ~= 0 then
+      return
+    end
+    if vim.system({ "git", "add", "-A" }, { cwd = root }):wait().code ~= 0 then
+      return
+    end
+
+    -- Security guard before committing on exit
+    local crypt = vim.system({ "git-crypt", "status", "-u" }, { cwd = root, text = true }):wait()
+    if crypt.code ~= 0 then
+      return
+    end
+    for line in (crypt.stdout or ""):gmatch("[^\r\n]+") do
+      if line:match("%.md$") and not line:match("not encrypted:%s+README%.md$") then
+        vim.api.nvim_err_writeln("Sync aborted on exit: unencrypted .md -> " .. line)
+        return
+      end
+    end
+
+    if vim.system({ "git", "diff", "--cached", "--quiet" }, { cwd = root }):wait().code == 1 then
+      if vim.system({ "git", "commit", "-m", "notes: sync" }, { cwd = root }):wait().code ~= 0 then
+        return
+      end
+      -- Finish pull --rebase && push detached so :wq returns immediately
+      if vim.fn.has("win32") == 1 then
+        vim.system({ "cmd", "/c", "git pull --rebase && git push || git rebase --abort" }, { cwd = root }):wait()
+      else
+        vim.system(
+          { "sh", "-c", "git pull --rebase >/dev/null 2>&1 && git push >/dev/null 2>&1 || git rebase --abort >/dev/null 2>&1" },
+          { cwd = root, detach = true }
+        )
+      end
+    end
+  end,
+})
+
 vim.api.nvim_create_user_command("NotesSync", function()
   sync_notes(true)
 end, { desc = "Verify git-crypt, commit, pull --rebase, and push notes" })
