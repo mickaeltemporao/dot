@@ -68,7 +68,7 @@ local function sync_notes(manual)
           return fail("Sync aborted: git-crypt not initialized or failed", vim.log.levels.ERROR)
         end
         for line in (crypt.stdout or ""):gmatch("[^\r\n]+") do
-          if line:match("%.md$") then
+          if line:match("%.md$") and not line:match("not encrypted:%s+README%.md$") then
             return fail("Sync aborted: unencrypted .md -> " .. line, vim.log.levels.ERROR)
           end
         end
