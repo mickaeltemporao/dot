@@ -24,3 +24,8 @@ if [[ "$OSTYPE" == "darwin"* ]] || command -v brew >/dev/null 2>&1; then
 else
     alias open="xdg-open"
 fi
+
+# Notes (zk + git-crypt)
+alias daily="zk daily"
+alias notes="zk ed"
+alias nsync='git -C "$ZK_NOTEBOOK_DIR" pull --rebase && git -C "$ZK_NOTEBOOK_DIR" add -A && git -C "$ZK_NOTEBOOK_DIR" commit -m "notes: sync" && git -C "$ZK_NOTEBOOK_DIR" push'

@@ -41,3 +41,21 @@ pres() {
     xwallpaper --output all --zoom "$HOME/.local/share/wallpaper/wallpaper.jpg" 2>/dev/null || true
 }
 
+# Quick dated scratchpad (`note`) or open/create named kebab-case note (`note my topic`)
+note() {
+    if [ $# -eq 0 ]; then
+        zk note
+    else
+        local title="$*"
+        local slug
+        slug=$(printf '%s' "${title%.md}" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+|-+$//g')
+        local file="$ZK_NOTEBOOK_DIR/${slug}.md"
+        [ -f "$file" ] || printf '# %s\n\n' "${title%.md}" > "$file"
+        nvim "$file"
+    fi
+}
+
+ngrep() {
+    rg --glob '!.zk/*' -- "$@" "$ZK_NOTEBOOK_DIR"
+}
+
