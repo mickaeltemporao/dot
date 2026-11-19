@@ -78,11 +78,15 @@ local function fuzzy_search()
   })
 end
 
--- TODO: Maybe allow for grep in files? 
 local function search_notes()
+  local notes_dir = os.getenv('ZK_NOTEBOOK_DIR')
+  if not notes_dir or notes_dir == '' then
+    vim.notify('Set $ZK_NOTEBOOK_DIR first', vim.log.levels.WARN, { title = 'Notes' })
+    return
+  end
   require('telescope.builtin').find_files {
-    cwd = hm .. '/Documents/notes/',
-    -- sorting_strategy = 'ascending',
+    cwd = notes_dir,
+    file_ignore_patterns = { '^%.zk/' },
   }
 end
 

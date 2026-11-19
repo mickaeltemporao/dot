@@ -23,13 +23,6 @@ return {
       'godlygeek/tabular'
     }
   },
-  -- Notepad
-  {
-    'lervag/wiki.vim',
-    config = function()
-      vim.g.wiki_root = '~/Documents/notes'
-    end
-  },
   {
     "hedyhli/markdown-toc.nvim",
     ft = "markdown",  -- Lazy load on markdown filetype
