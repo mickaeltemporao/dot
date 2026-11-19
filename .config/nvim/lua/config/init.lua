@@ -2,6 +2,7 @@ require("config.options")
 require("config.plugins")
 require("config.keymaps")
 require("config.theme")
+require("config.notes")
 local empty_buffer_group = vim.api.nvim_create_augroup("EmptyBufferWrap", { clear = true })
 vim.api.nvim_create_autocmd({ "BufEnter", "FileType" }, {
   group = empty_buffer_group,

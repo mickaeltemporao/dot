@@ -1,3 +1,8 @@
+-- Lean, zero-plugin notes setup:
+-- 1. Native `zk lsp` on markdown files inside a .zk/ notebook (gd, K hover, gr backlinks)
+-- 2. Copilot-off guard inside $ZK_NOTEBOOK_DIR (+ strict guard for *.gpg/*.asc)
+-- 3. Debounced, git-crypt-verified auto-sync on save (:NotesSync / :NotesSyncToggle)
+
 local function norm(path)
   if not path or path == "" then
     return nil
@@ -10,15 +15,7 @@ local function in_notebook(filepath)
   return root and file and (file == root or file:sub(1, #root + 1) == root .. "/")
 end
 
-local function require_notebook()
-  local dir = norm(vim.env.ZK_NOTEBOOK_DIR)
-  if not dir then
-    vim.notify("Set $ZK_NOTEBOOK_DIR first", vim.log.levels.WARN, { title = "Notes" })
-  end
-  return dir
-end
-
--- Asynchronous debounced Git + git-crypt sync
+-- 1. Async debounced Git + git-crypt sync
 vim.g.notes_autosync = true
 local sync_running, sync_pending, sync_timer = false, false, nil
 
@@ -110,8 +107,51 @@ local function sync_notes(manual)
   end)
 end
 
--- Security + auto-sync autocmds (active immediately, even before lazy loads zk-nvim)
-local aug = vim.api.nvim_create_augroup("NotesLeanConfig", { clear = true })
+-- 2. Native zk LSP + security + auto-sync autocmds
+local aug = vim.api.nvim_create_augroup("NotesConfig", { clear = true })
+
+vim.api.nvim_create_autocmd("FileType", {
+  group = aug,
+  pattern = "markdown",
+  callback = function(ev)
+    if vim.fn.executable("zk") ~= 1 then
+      return
+    end
+    local root = vim.fs.root(ev.buf, ".zk")
+    if root then
+      vim.lsp.start({
+        name = "zk",
+        cmd = { "zk", "lsp" },
+        root_dir = root,
+      })
+    end
+  end,
+})
+
+vim.api.nvim_create_autocmd("LspAttach", {
+  group = aug,
+  callback = function(ev)
+    local client = vim.lsp.get_client_by_id(ev.data.client_id)
+    if not client or client.name ~= "zk" then
+      return
+    end
+    local nmap = function(k, f, d)
+      vim.keymap.set("n", k, f, { buffer = ev.buf, desc = "ZK: " .. d })
+    end
+    nmap("gd", vim.lsp.buf.definition, "Go to linked note")
+    nmap("K", vim.lsp.buf.hover, "Preview linked note")
+    nmap("gr", function()
+      local ok, tb = pcall(require, "telescope.builtin")
+      if ok then
+        tb.lsp_references()
+      else
+        vim.lsp.buf.references()
+      end
+    end, "Backlinks (references)")
+    nmap("<leader>rn", vim.lsp.buf.rename, "Rename note/link")
+  end,
+})
+
 vim.api.nvim_create_autocmd({ "BufEnter", "BufNewFile" }, {
   group = aug,
   pattern = "*",
@@ -121,6 +161,7 @@ vim.api.nvim_create_autocmd({ "BufEnter", "BufNewFile" }, {
     end
   end,
 })
+
 vim.api.nvim_create_autocmd({ "BufReadPre", "BufReadPost", "BufNewFile", "BufEnter" }, {
   group = aug,
   pattern = { "*.gpg", "*.asc", "GPGRecipients_*", "GPGOptions_*" },
@@ -132,6 +173,7 @@ vim.api.nvim_create_autocmd({ "BufReadPre", "BufReadPost", "BufNewFile", "BufEnt
     vim.b[ev.buf].copilot_enabled = false
   end,
 })
+
 vim.api.nvim_create_autocmd("BufWritePost", {
   group = aug,
   pattern = "*",
@@ -155,65 +197,11 @@ vim.api.nvim_create_autocmd("BufWritePost", {
   end,
 })
 
-return {
-  {
-    "zk-org/zk-nvim",
-    dependencies = { "nvim-telescope/telescope.nvim" },
-    config = function()
-      require("zk").setup({
-        picker = "telescope",
-        lsp = {
-          config = {
-            cmd = { "zk", "lsp" },
-            name = "zk",
-            on_attach = function(_, bufnr)
-              local nmap = function(k, f, d)
-                vim.keymap.set("n", k, f, { buffer = bufnr, desc = "ZK: " .. d })
-              end
-              nmap("gd", vim.lsp.buf.definition, "Go to linked note")
-              nmap("K", vim.lsp.buf.hover, "Hover note preview")
-              nmap("<leader>rn", vim.lsp.buf.rename, "Rename note/link")
-            end,
-          },
-          auto_attach = { enabled = vim.fn.executable("zk") == 1, filetypes = { "markdown" } },
-        },
-      })
+vim.api.nvim_create_user_command("NotesSync", function()
+  sync_notes(true)
+end, { desc = "Verify git-crypt, commit, pull --rebase, and push notes" })
 
-      local ok_wk, wk = pcall(require, "which-key")
-      if ok_wk then
-        wk.add({ { "<leader>n", group = "[N]otes" } })
-      end
-
-      local map = vim.keymap.set
-      map("n", "<leader>nn", function()
-        vim.ui.input({ prompt = "Note title (empty = Note): " }, function(t)
-          if t ~= nil then
-            require("zk").new(t ~= "" and { title = t } or {})
-          end
-        end)
-      end, { desc = "[N]ew dated note" })
-      map("n", "<leader>nd", function() require("zk").new({ dir = "daily" }) end, { desc = "[D]aily note" })
-      map("n", "<leader>ni", function()
-        local d = require_notebook()
-        if d then vim.cmd.edit(d .. "/index.md") end
-      end, { desc = "[I]ndex note" })
-      map("n", "<leader>nf", "<Cmd>ZkNotes { sort = { 'modified' } }<CR>", { desc = "[F]ind notes" })
-      map("n", "<leader>nt", "<Cmd>ZkTags<CR>", { desc = "Filter by [T]ags" })
-      map("n", "<leader>nb", "<Cmd>ZkBacklinks<CR>", { desc = "[B]acklinks" })
-      map("n", "<leader>nl", "<Cmd>ZkLinks<CR>", { desc = "Outgoing [L]inks" })
-      map("n", "<leader>ng", function()
-        local d = require_notebook()
-        if d then
-          require("telescope.builtin").live_grep({ prompt_title = "Grep Notes", cwd = d, file_ignore_patterns = { "^%.zk/" } })
-        end
-      end, { desc = "[G]rep notes" })
-      map("v", "<leader>nn", ":'<,'>ZkNewFromTitleSelection<CR>", { desc = "[N]ew note from selection title" })
-      map("v", "<leader>nc", ":'<,'>ZkNewFromContentSelection<CR>", { desc = "New note from [C]ontent selection" })
-      map("n", "<leader>np", function() sync_notes(true) end, { desc = "[P]ush / sync notes now" })
-      map("n", "<leader>nS", function()
-        vim.g.notes_autosync = not vim.g.notes_autosync
-        vim.notify("Auto-sync on save: " .. (vim.g.notes_autosync and "ON" or "OFF"), vim.log.levels.INFO, { title = "Notes Sync" })
-      end, { desc = "Toggle auto-[S]ync on save" })
-    end,
-  },
-}
+vim.api.nvim_create_user_command("NotesSyncToggle", function()
+  vim.g.notes_autosync = not vim.g.notes_autosync
+  vim.notify("Auto-sync on save: " .. (vim.g.notes_autosync and "ON" or "OFF"), vim.log.levels.INFO, { title = "Notes Sync" })
+end, { desc = "Toggle automatic Git sync when saving notes" })
