@@ -6,6 +6,8 @@
 source ~/.config/neomutt/settings
 source ~/.config/neomutt/colors
 source ~/.config/neomutt/mappings
+set alias_file = "~/.local/share/contacts/contacts/aliases"
+source "test -f ~/.local/share/contacts/contacts/aliases && cat ~/.local/share/contacts/contacts/aliases |"
 
 # 2. Account Hooks (Dynamic Switching)
 # `folder-hook` runs when you actually open/enter the folder (swaps UI & Sending configs)
@@ -26,3 +28,4 @@ mailboxes -nopoll -label "  Archive" "~/Mail/personal/[Gmail]/All Mail"
 # 4. Default account on startup
 source ~/.config/neomutt/accounts/work
 push "<change-folder>~/Mail/work/INBOX<enter>"
+
