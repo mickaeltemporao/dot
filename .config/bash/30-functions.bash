@@ -87,3 +87,27 @@ ngrep() {
     rg --glob '!.zk/*' -- "$@" "$ZK_NOTEBOOK_DIR"
 }
 
+nsync() {
+    local dir="${ZK_NOTEBOOK_DIR:?ZK_NOTEBOOK_DIR is not set}"
+    (
+        cd "$dir" || return 1
+        if [ -e .git/MERGE_HEAD ] || [ -d .git/rebase-merge ] || [ -d .git/rebase-apply ]; then
+            echo "nsync: merge/rebase in progress; resolve conflicts first" >&2
+            return 1
+        fi
+        git add -A || return 1
+        local unencrypted
+        unencrypted=$(git-crypt status -u | grep -E '\.md$' | grep -vE 'not encrypted:\s+README\.md$' || true)
+        if [ -n "$unencrypted" ]; then
+            echo "nsync: aborted — unencrypted .md file detected:" >&2
+            echo "$unencrypted" >&2
+            return 1
+        fi
+        if ! git diff --cached --quiet; then
+            git commit -m "notes: sync" || return 1
+        fi
+        git pull --rebase || return 1
+        git push
+    )
+}
+

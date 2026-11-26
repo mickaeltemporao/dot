@@ -25,6 +25,5 @@ else
     alias open="xdg-open"
 fi
 
-# Notes (zk + git-crypt)
+# Notes (zk + git-crypt; nsync function defined in 30-functions.bash)
 alias notes="zk ed"
-alias nsync='git -C "$ZK_NOTEBOOK_DIR" pull --rebase && git -C "$ZK_NOTEBOOK_DIR" add -A && git -C "$ZK_NOTEBOOK_DIR" commit -m "notes: sync" && git -C "$ZK_NOTEBOOK_DIR" push'

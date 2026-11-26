@@ -18,6 +18,7 @@ end
 -- 1. Async debounced Git + git-crypt sync
 vim.g.notes_autosync = true
 local sync_running, sync_pending, sync_timer = false, false, nil
+local last_pull_ms = 0
 
 local function run(cmd, cwd, cb)
   vim.system(cmd, { cwd = cwd, text = true }, function(res)
@@ -27,11 +28,65 @@ local function run(cmd, cwd, cb)
   end)
 end
 
+local function in_conflict_state(root)
+  local git_dir = root .. "/.git"
+  return vim.uv.fs_stat(git_dir .. "/MERGE_HEAD") ~= nil
+    or vim.uv.fs_stat(git_dir .. "/rebase-merge") ~= nil
+    or vim.uv.fs_stat(git_dir .. "/rebase-apply") ~= nil
+end
+
+local function is_conflict_output(res)
+  local text = (res.stdout or "") .. "\n" .. (res.stderr or "")
+  return text:match("CONFLICT") ~= nil
+    or text:match("could not apply") ~= nil
+    or text:match("Merge conflict") ~= nil
+end
+
+local function pull_on_enter(root)
+  if sync_running or in_conflict_state(root) then
+    return
+  end
+  local now = vim.uv.now()
+  if now - last_pull_ms < 60000 then
+    return
+  end
+  last_pull_ms = now
+  run({ "git", "status", "--porcelain" }, root, function(st)
+    if st.code ~= 0 or (st.stdout and st.stdout:match("%S")) then
+      return
+    end
+    run({ "git", "rev-parse", "HEAD" }, root, function(before)
+      run({ "git", "pull", "--rebase" }, root, function(pull)
+        if pull.code ~= 0 then
+          if is_conflict_output(pull) then
+            run({ "git", "rebase", "--abort" }, root, function()
+              vim.notify("Sync conflict pulling notes; run 'nsync' in terminal to resolve", vim.log.levels.ERROR, { title = "Notes Sync" })
+            end)
+          end
+          return
+        end
+        run({ "git", "rev-parse", "HEAD" }, root, function(after)
+          if before.code == 0 and after.code == 0 and before.stdout ~= after.stdout then
+            vim.cmd("checktime")
+            vim.notify("Notes pulled from origin", vim.log.levels.INFO, { title = "Notes Sync" })
+          end
+        end)
+      end)
+    end)
+  end)
+end
+
 local function sync_notes(manual)
   local root = norm(vim.env.ZK_NOTEBOOK_DIR)
   if not root or not vim.uv.fs_stat(root .. "/.git") then
     if manual then
       vim.notify("Not a Git repo: " .. (root or "$ZK_NOTEBOOK_DIR unset"), vim.log.levels.WARN, { title = "Notes Sync" })
+    end
+    return
+  end
+  if in_conflict_state(root) then
+    if manual then
+      vim.notify("Sync paused: resolve Git merge/rebase conflict first", vim.log.levels.WARN, { title = "Notes Sync" })
     end
     return
   end
@@ -76,10 +131,16 @@ local function sync_notes(manual)
           local function pull_push(committed)
             run({ "git", "pull", "--rebase" }, root, function(pull)
               if pull.code ~= 0 then
+                local conflict = is_conflict_output(pull)
                 return run({ "git", "rebase", "--abort" }, root, function()
-                  fail("Pull failed (offline or conflict); local commit kept")
+                  if conflict then
+                    fail("Sync conflict in notes; run 'nsync' in terminal to resolve", vim.log.levels.ERROR)
+                  else
+                    fail("Pull failed (offline?); local commit kept")
+                  end
                 end)
               end
+              last_pull_ms = vim.uv.now()
               run({ "git", "push" }, root, function(push)
                 if push.code ~= 0 then
                   return fail("Push failed: " .. (push.stderr or ""):gsub("%s+$", ""))
@@ -158,6 +219,12 @@ vim.api.nvim_create_autocmd({ "BufEnter", "BufNewFile" }, {
   callback = function(ev)
     if in_notebook(ev.file) then
       vim.b[ev.buf].copilot_enabled = false
+      if ev.event == "BufEnter" and vim.g.notes_autosync then
+        local root = norm(vim.env.ZK_NOTEBOOK_DIR)
+        if root and vim.uv.fs_stat(root .. "/.git") then
+          pull_on_enter(root)
+        end
+      end
     end
   end,
 })

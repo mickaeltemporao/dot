@@ -12,3 +12,6 @@
 	rebase = true
 [push]
 	autoSetupRemote = true
+[merge "git-crypt"]
+	name = git-crypt merge driver
+	driver = "sh -c 'set -eu; o=\"$1\" a=\"$2\" b=\"$3\" l=\"$4\" p=\"$5\"; to=$(mktemp); ta=$(mktemp); tb=$(mktemp); tm=$(mktemp); trap '\\''rm -f \"$to\" \"$ta\" \"$tb\" \"$tm\"'\\'' EXIT; [ -s \"$o\" ] && { git-crypt smudge < \"$o\" > \"$to\" || exit 129; }; [ -s \"$a\" ] && { git-crypt smudge < \"$a\" > \"$ta\" || exit 129; }; [ -s \"$b\" ] && { git-crypt smudge < \"$b\" > \"$tb\" || exit 129; }; rc=0; git merge-file --marker-size=\"$l\" -L \"ours:$p\" -L \"base:$p\" -L \"theirs:$p\" -p \"$ta\" \"$to\" \"$tb\" > \"$tm\" || rc=$?; git-crypt clean < \"$tm\" > \"$a\" || exit 129; exit \"$rc\"' _ %O %A %B %L %P"
