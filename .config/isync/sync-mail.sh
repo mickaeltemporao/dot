@@ -91,6 +91,9 @@ PID_PERSONAL=$!
 wait $PID_WORK
 wait $PID_PERSONAL
 
+# Update notmuch search index
+notmuch new >/dev/null 2>&1
+
 # Sync Contacts (CardDAV via DavMail) & Google Calendar (CalDAV via vdirsyncer)
 if command -v vdirsyncer >/dev/null 2>&1; then
     run_timeout vdirsyncer sync contacts personal_calendar >/dev/null 2>&1 &

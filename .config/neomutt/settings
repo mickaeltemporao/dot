@@ -74,4 +74,9 @@ set query_format = "%4c %t %-25.25n %-25.25a %e"
 bind editor <Tab> complete-query
 bind editor ^T complete-query
 
+# ----------------------------------------------------
+# Notmuch Cross-Folder Search
+# ----------------------------------------------------
+set nm_default_url = "notmuch:///home/mt/Mail"
+
 
