@@ -54,6 +54,9 @@ macro index,pager A "<pipe-message>khard add-email<enter>" "Add contact to addre
 # Press ',c' in index or pager to sync encrypted contacts (git-crypt) in background
 macro index,pager ,c "<shell-escape>(~/.local/bin/sync-contacts --notify >/dev/null 2>&1 &)<enter><enter-command>echo 'Syncing contacts in background...'<enter>" "Sync contacts (git-crypt)"
 
+# Press ',r' in index or pager to draft an AI reply into Drafts in background
+macro index,pager ,r "<pipe-message>(airply --single >/dev/null 2>&1 &)<enter><enter-command>echo 'Drafting AI reply in background...'<enter>" "Draft AI reply (airply)"
+
 # ----------------------------------------------------
 # Sync Shortcuts (mbsync)
 # ----------------------------------------------------

@@ -1,0 +1,19 @@
+# airply configuration (AI draft replies for NeoMutt)
+provider = "ollama"
+model = "muse-glimmer:30b-mlx"
+endpoint = "http://localhost:11434/v1/chat/completions"
+temperature = 0.5
+
+[accounts.work]
+inbox = "~/Mail/work/INBOX"
+drafts = "~/Mail/work/Drafts"
+from = "Mickael Temporão <m.temporao@sciencespobordeaux.fr>"
+addresses = ["m.temporao@sciencespobordeaux.fr", "m.temporao@scpobx.fr"]
+skill = "dve"
+
+[accounts.personal]
+inbox = "~/Mail/personal/INBOX"
+drafts = "~/Mail/personal/[Gmail]/Drafts"
+from = "Mickael Temporão <mickael.temporao@gmail.com>"
+addresses = ["mickael.temporao@gmail.com"]
+skill = "personal-assistant"
